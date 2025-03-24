@@ -23,6 +23,6 @@
       "default_title": "My Sidebar",
       "default_panel": "sidebar/sidebar.html",
       "default_icon": "icons/icon-32.png"
-    },
+    } ,
     "permissions": ["storage", "tabs"]
   }

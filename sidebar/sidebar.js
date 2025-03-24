@@ -137,6 +137,7 @@ try {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
+  
 // Globale Variablen
 let topicsData = [];
 let currentTopicIndex = -1;
