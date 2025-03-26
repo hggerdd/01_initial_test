@@ -104,26 +104,27 @@ input[type="text"] {
 }
 
 .form-buttons button:last-child {
-  background-color: #f44336;
+  background-color: #943030;  /* Less intensive red */
   color: white;
 }
 
 #topics-list {
   list-style-type: none;
   padding: 0;
-  margin: 0;
+  margin: 10px 0;  /* Add margin to create better spacing */
   overflow-y: auto;
   max-height: 33vh;
   border: 1px solid #333;
   border-radius: 4px;
+  background-color: #1a1a1a;  /* Add a subtle background */
 }
 
 .topic-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 8px;
-  margin-bottom: 2px;
+  padding: 8px 12px;  /* Increase padding for better readability */
+  margin: 2px;
   background-color: #222;
   border-radius: 3px;
   transition: background-color 0.2s;
@@ -150,6 +151,16 @@ input[type="text"] {
   word-break: break-word;
 }
 
+.tab-count-badge {
+  color: #888;
+  font-size: 12px;
+  font-weight: normal;
+}
+
+.topic-item.selected .tab-count-badge {
+  color: #ccc;
+}
+
 .topic-actions {
   display: flex;
   gap: 3px;
@@ -174,30 +185,11 @@ input[type="text"] {
 }
 
 .delete-btn {
-  color: #f44336;
+  color: #d46c6c;  /* Less intensive red */
 }
 
 .delete-btn:hover {
-  background-color: rgba(244, 67, 54, 0.2);
-}
-
-#current-topic-info {
-  background-color: #222;
-  padding: 10px;
-  border-radius: 4px;
-  margin-top: 5px;
-  font-size: 13px;
-}
-
-#active-topic {
-  font-weight: bold;
-  margin-bottom: 5px;
-  color: #4CAF50;
-}
-
-#tab-count {
-  color: #aaa;
-  font-size: 12px;
+  background-color: rgba(148, 48, 48, 0.2);  /* Matching the new red */
 }
 
 .topics-list .empty-list, .bookmark-categories .empty-list, .bookmark-links .empty-list {
@@ -242,6 +234,7 @@ input[type="text"] {
   border-radius: 3px;
   font-size: 13px;
   cursor: pointer;
+  overflow: hidden;
 }
 
 .category-item:hover, .link-item:hover {
@@ -249,17 +242,25 @@ input[type="text"] {
 }
 
 .category-item.selected {
-  background-color: #164B7E;
+  background-color: #164B7E;  /* Same as topic-item.selected */
   font-weight: bold;
+}
+
+.category-item.selected:hover {
+  background-color: #1A5998;  /* Same as topic-item.selected:hover */
 }
 
 .category-text, .link-text {
   flex-grow: 1;
   margin-right: 5px;
   word-break: break-word;
+  white-space: nowrap; /* Ensure single-line display */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .link-url {
+  display: none; /* Hide the URL by default */
   color: #4CAF50;
   font-size: 10px;
   margin-top: 2px;
@@ -267,6 +268,9 @@ input[type="text"] {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 180px;
+}
+
+.link-item:hover .link-url {
   display: block;
 }
 

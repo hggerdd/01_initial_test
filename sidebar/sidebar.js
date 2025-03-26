@@ -1,7 +1,18 @@
 // Globale Variablen definieren
 const hasFirefoxAPI = typeof browser !== 'undefined' && browser.storage;
-let topicsData = [];
+let topicsData = []; // [{ name: "Topic 1", categories: [{ name: "Category 1", bookmarks: [{ title: "Google", url: "https://google.com" }] }] }]
 let currentTopicIndex = -1;
+
+// HTML-Escape-Funktion um XSS zu verhindern
+function escapeHTML(str) {
+  if (!str) return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;") // Fixed typo here
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
 // Globale Funktionen
 // Speichert den aktiven Tab für ein Topic
@@ -73,14 +84,12 @@ document.addEventListener("DOMContentLoaded", function() {
     saveNewTopicBtn: document.getElementById("save-new-topic-btn"),
     cancelNewTopicBtn: document.getElementById("cancel-new-topic-btn"),
     topicsList: document.getElementById("topics-list"),
-    activeTopic: document.getElementById("active-topic"),
-    tabCount: document.getElementById("tab-count"),
     editTopicForm: document.getElementById("edit-topic-form"),
     editTopicInput: document.getElementById("edit-topic-input"),
     saveEditTopicBtn: document.getElementById("save-edit-topic-btn"),
     cancelEditTopicBtn: document.getElementById("cancel-edit-topic-btn"),
-    editTopicId: document.getElementById("edit-topic-id"),
-    currentTopicInfo: document.getElementById("current-topic-info")
+    editTopicId: document.getElementById("edit-topic-id")
+    // Remove activeTopic, tabCount, and currentTopicInfo
   };
 
   // Überprüfe, ob wichtige Elemente gefunden wurden
@@ -112,17 +121,6 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   }
 
-  // HTML-Escape-Funktion um XSS zu verhindern
-  function escapeHTML(str) {
-    if (!str) return "";
-    return str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
   // Storage-Funktionen
   // Strukturierte Daten laden (mit Tabs pro Topic)
   function loadTopicsData() {
@@ -138,7 +136,6 @@ document.addEventListener("DOMContentLoaded", function() {
         
         // Asynchronen Funktionen nacheinander ausführen
         renderTopics();
-        updateCurrentTopicInfo();
         
         if (currentTopicIndex !== -1) {
           try {
@@ -164,7 +161,6 @@ document.addEventListener("DOMContentLoaded", function() {
         }
         
         renderTopics();
-        updateCurrentTopicInfo();
       } catch (e) {
         console.error("Fehler beim Laden der Topics-Daten:", e);
         topicsData = [];
@@ -196,8 +192,17 @@ document.addEventListener("DOMContentLoaded", function() {
       }
       li.dataset.id = index;
       
+      // Calculate tab count, excluding system tabs
+      const tabCount = topicData.tabs ? 
+        topicData.tabs.filter(tab => tab && tab.url && 
+          !tab.url.startsWith("about:") && 
+          !tab.url.startsWith("chrome:") && 
+          !tab.url.startsWith("moz-extension:") &&
+          tab.url !== "about:blank"
+        ).length : 0;
+      
       li.innerHTML = `
-        <span class="topic-text">${escapeHTML(topicData.name)}</span>
+        <span class="topic-text">${escapeHTML(topicData.name)} <span class="tab-count-badge">(${tabCount})</span></span>
         <div class="topic-actions">
           <button class="edit-btn" title="Edit Topic">
             <i class="fas fa-edit"></i>
@@ -238,76 +243,19 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 
-  // Aktualisiert die Topic-Info-Anzeige
-  function updateCurrentTopicInfo() {
-    if (!elements.activeTopic || !elements.tabCount) {
-      console.warn("Topic-Info-Elemente nicht gefunden");
-      return;
-    }
-    
-    if (currentTopicIndex !== -1 && topicsData[currentTopicIndex]) {
-      const topic = topicsData[currentTopicIndex];
-      const tabCount = topic.tabs ? topic.tabs.filter(tab => tab && tab.url && tab.url !== "about:blank").length : 0;
-      safeTextContent(elements.activeTopic, `Active: ${topic.name}`);
-      safeTextContent(elements.tabCount, `Open tabs: ${tabCount}`);
-    } else {
-      safeTextContent(elements.activeTopic, "No topic selected");
-      safeTextContent(elements.tabCount, "Open tabs: 0");
-    }
-  }
-
   // Ein Topic auswählen und Tabs anzeigen
   function selectTopic(index) {
     if (index === currentTopicIndex) return; // Bereits ausgewählt
     
     if (index >= 0 && index < topicsData.length) {
       console.log(`Wechsle von Topic ${currentTopicIndex} zu Topic ${index}`);
-      
-      // Bevor wir das Topic wechseln, speichere den aktiv angezeigten Tab
-      if (currentTopicIndex !== -1 && hasFirefoxAPI) {
-        try {
-          // Finde den aktiven Tab
-          browser.tabs.query({ active: true, currentWindow: true })
-            .then(activeTabs => {
-              if (activeTabs.length > 0) {
-                const activeTab = activeTabs[0];
-                
-                // Suche den Index dieses Tabs in den gespeicherten Tabs des aktuellen Topics
-                if (topicsData[currentTopicIndex] && topicsData[currentTopicIndex].tabs) {
-                  const tabUrls = topicsData[currentTopicIndex].tabs.map(tab => tab.url);
-                  const activeTabIndex = tabUrls.indexOf(activeTab.url);
-                  
-                  if (activeTabIndex !== -1) {
-                    // Speichere den aktiven Tab-Index
-                    console.log(`Speichere aktiven Tab-Index ${activeTabIndex} für Topic ${currentTopicIndex}`);
-                    topicsData[currentTopicIndex].activeTabIndex = activeTabIndex;
-                  }
-                }
-              }
-            })
-            .catch(err => {
-              console.error("Fehler beim Ermitteln des aktiven Tabs:", err);
-            });
-        } catch (error) {
-          console.error("Fehler beim Speichern des aktiven Tabs:", error);
-        }
-      }
-      
-      const prevIndex = currentTopicIndex;
       currentTopicIndex = index;
-      
-      // Speichere die aktuellen Tabs für das vorherige Topic
-      if (prevIndex !== -1 && prevIndex < topicsData.length) {
-        try {
-          saveTabsForCurrentTopic(prevIndex);
-        } catch (error) {
-          console.error("Fehler beim Speichern der Tabs:", error);
-        }
-      }
-      
+
+      // Render categories for the selected topic
+      renderCategories();
+
       // Aktualisiere die UI
       renderTopics();
-      updateCurrentTopicInfo();
       
       // Öffne die Tabs für das neu ausgewählte Topic
       if (hasFirefoxAPI) {
@@ -367,6 +315,7 @@ document.addEventListener("DOMContentLoaded", function() {
           setTimeout(() => {
             try {
               saveTabsForCurrentTopic(currentTopicIndex);
+              renderTopics();  // Add this line to update UI immediately
             } catch (error) {
               console.error("Fehler beim Speichern der Tabs:", error);
             }
@@ -405,6 +354,7 @@ document.addEventListener("DOMContentLoaded", function() {
             setTimeout(() => {
               try {
                 saveTabsForCurrentTopic(currentTopicIndex);
+                renderTopics();  // Add this line to update UI immediately
               } catch (error) {
                 console.error("Fehler beim Speichern der Tabs:", error);
               }
@@ -427,6 +377,7 @@ document.addEventListener("DOMContentLoaded", function() {
           setTimeout(() => {
             try {
               saveTabsForCurrentTopic(currentTopicIndex);
+              renderTopics();  // Add this line to update UI immediately
             } catch (error) {
               console.error("Fehler beim Speichern der Tabs:", error);
             }
@@ -712,8 +663,7 @@ document.addEventListener("DOMContentLoaded", function() {
             topicsData[topicIndex].tabs = [];
           }
           saveTopicsData();
-          // UI aktualisieren, um die richtige Tab-Anzahl anzuzeigen
-          updateCurrentTopicInfo();
+          renderTopics(); // Only re-render topics to update tab count
         }
       }).catch(err => {
         console.error("Fehler beim Abfragen der Tabs:", err);
@@ -818,10 +768,7 @@ document.addEventListener("DOMContentLoaded", function() {
       topicsData[index].name = topicText;
       saveTopicsData(); // Zuerst speichern
       renderTopics();
-      updateCurrentTopicInfo();
       
-      safeStyle(elements.editTopicForm, "display", "none");
-      safeValue(elements.editTopicInput, "");
     }
   }
 
@@ -856,7 +803,6 @@ document.addEventListener("DOMContentLoaded", function() {
       
       // UI aktualisieren
       renderTopics();
-      updateCurrentTopicInfo();
       
       // Tabs nur wechseln, wenn nötig
       if (needTabSwitch && hasFirefoxAPI) {
@@ -870,7 +816,7 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   // Event-Listener einrichten
-  // Add Topic Button Klick-Handler
+  // Topic handlers
   if (elements.addTopicBtn) {
     elements.addTopicBtn.addEventListener("click", () => {
       safeStyle(elements.newTopicForm, "display", "block");
@@ -881,37 +827,16 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
   
-  // Cancel Add Topic Button Klick-Handler
+  // Topic save/cancel handlers
+  if (elements.saveNewTopicBtn) {
+    elements.saveNewTopicBtn.addEventListener("click", addNewTopic);
+  }
   if (elements.cancelNewTopicBtn) {
     elements.cancelNewTopicBtn.addEventListener("click", () => {
       safeStyle(elements.newTopicForm, "display", "none");
       safeValue(elements.newTopicInput, "");
     });
   }
-  
-  // Save New Topic Button Klick-Handler
-  if (elements.saveNewTopicBtn) {
-    elements.saveNewTopicBtn.addEventListener("click", () => {
-      addNewTopic();
-    });
-  }
-  
-  // Cancel Edit Topic Button Klick-Handler
-  if (elements.cancelEditTopicBtn) {
-    elements.cancelEditTopicBtn.addEventListener("click", () => {
-      safeStyle(elements.editTopicForm, "display", "none");
-      safeValue(elements.editTopicInput, "");
-    });
-  }
-  
-  // Save Edit Topic Button Klick-Handler
-  if (elements.saveEditTopicBtn) {
-    elements.saveEditTopicBtn.addEventListener("click", () => {
-      saveEditedTopic();
-    });
-  }
-  
-  // Enter-Taste zum Speichern im New Topic Form
   if (elements.newTopicInput) {
     elements.newTopicInput.addEventListener("keyup", (event) => {
       if (event.key === "Enter") {
@@ -919,12 +844,164 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     });
   }
-  
-  // Enter-Taste zum Speichern im Edit Topic Form
-  if (elements.editTopicInput) {
-    elements.editTopicInput.addEventListener("keyup", (event) => {
+
+  // Category handlers
+  const addCategoryBtn = document.getElementById("add-category-btn");
+  const newCategoryInput = document.getElementById("new-category-input");
+  const saveCategoryBtn = document.getElementById("save-category-btn");
+  const cancelCategoryBtn = document.getElementById("cancel-category-btn");
+
+  if (addCategoryBtn && newCategoryInput) {
+    addCategoryBtn.addEventListener("click", () => {
+      const addCategoryForm = document.getElementById("add-category-form");
+      if (addCategoryForm) {
+        addCategoryForm.style.display = "block";
+        newCategoryInput.focus();
+      }
+    });
+  }
+
+  if (newCategoryInput) {
+    newCategoryInput.addEventListener("keyup", (event) => {
       if (event.key === "Enter") {
-        saveEditedTopic();
+        addCategory();
+      }
+    });
+  }
+
+  if (cancelCategoryBtn) {
+    cancelCategoryBtn.addEventListener("click", () => {
+      const addCategoryForm = document.getElementById("add-category-form");
+      if (addCategoryForm) {
+        addCategoryForm.style.display = "none";
+        newCategoryInput.value = "";
+      }
+    });
+  }
+
+  if (saveCategoryBtn) {
+    saveCategoryBtn.addEventListener("click", addCategory);
+  }
+
+  // Bookmark handlers
+  const addLinkBtn = document.getElementById("add-link-btn");
+  const newLinkTitleInput = document.getElementById("new-link-title-input");
+  const newLinkUrlInput = document.getElementById("new-link-url-input");
+  const saveLinkBtn = document.getElementById("save-link-btn");
+  const cancelLinkBtn = document.getElementById("cancel-link-btn");
+  
+  if (addLinkBtn) {
+    addLinkBtn.addEventListener("click", () => {
+      const addLinkForm = document.getElementById("add-link-form");
+      if (addLinkForm && newLinkTitleInput) {
+        addLinkForm.style.display = "block";
+        newLinkTitleInput.focus();
+      }
+    });
+  }
+
+  if (newLinkTitleInput && newLinkUrlInput) {
+    newLinkTitleInput.addEventListener("keyup", (event) => {
+      if (event.key === "Enter") {
+        newLinkUrlInput.focus();
+      }
+    });
+    
+    newLinkUrlInput.addEventListener("keyup", (event) => {
+      if (event.key === "Enter") {
+        const selectedCategoryName = document.getElementById("selected-category-name").textContent.trim();
+        if (selectedCategoryName) {
+          const categoryIndex = topicsData[currentTopicIndex]?.categories.findIndex(
+            (category) => category.name === selectedCategoryName
+          );
+          if (categoryIndex !== -1) {
+            addBookmark(categoryIndex);
+          }
+        }
+      }
+    });
+  }
+
+  // Use Current Tab Button Klick-Handler
+  const useCurrentUrlBtn = document.getElementById("use-current-url-btn");
+  if (useCurrentUrlBtn) {
+    useCurrentUrlBtn.addEventListener("click", () => {
+      if (!hasFirefoxAPI) return;
+
+      browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+        if (tabs.length > 0) {
+          const activeTab = tabs[0];
+          const titleInput = document.getElementById("new-link-title-input");
+          const urlInput = document.getElementById("new-link-url-input");
+
+          if (titleInput && urlInput) {
+            titleInput.value = activeTab.title || "Untitled";
+            urlInput.value = activeTab.url || "";
+          }
+        }
+      }).catch((err) => {
+        console.error("Fehler beim Abrufen des aktuellen Tabs:", err);
+      });
+    });
+  }
+
+  // Use Current Tab for Editing Button Klick-Handler
+  const useCurrentUrlEditBtn = document.getElementById("use-current-url-edit-btn");
+  if (useCurrentUrlEditBtn) {
+    useCurrentUrlEditBtn.addEventListener("click", () => {
+      if (!hasFirefoxAPI) return;
+
+      browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+        if (tabs.length > 0) {
+          const activeTab = tabs[0];
+          const titleInput = document.getElementById("edit-link-title-input");
+          const urlInput = document.getElementById("edit-link-url-input");
+
+          if (titleInput && urlInput) {
+            titleInput.value = activeTab.title || "Untitled";
+            urlInput.value = activeTab.url || "";
+          }
+        }
+      }).catch((err) => {
+        console.error("Fehler beim Abrufen des aktuellen Tabs:", err);
+      });
+    });
+  }
+
+  // Save Edited Category Button Klick-Handler
+  const saveEditCategoryBtn = document.getElementById("save-edit-category-btn");
+  if (saveEditCategoryBtn) {
+    saveEditCategoryBtn.addEventListener("click", () => {
+      saveEditedCategory();
+    });
+  }
+
+  // Cancel Edit Category Button Klick-Handler
+  const cancelEditCategoryBtn = document.getElementById("cancel-edit-category-btn");
+  if (cancelEditCategoryBtn) {
+    cancelEditCategoryBtn.addEventListener("click", () => {
+      const editCategoryForm = document.getElementById("edit-category-form");
+      if (editCategoryForm) {
+        editCategoryForm.style.display = "none";
+      }
+    });
+  }
+
+  // Save Edited Bookmark Button Klick-Handler
+  const saveEditLinkBtn = document.getElementById("save-edit-link-btn");
+  if (saveEditLinkBtn) {
+    saveEditLinkBtn.addEventListener("click", () => {
+      saveEditedBookmark();
+    });
+  }
+
+  // Cancel Edit Bookmark Button Klick-Handler
+  const cancelEditLinkBtn = document.getElementById("cancel-edit-link-btn");
+  if (cancelEditLinkBtn) {
+    cancelEditLinkBtn.addEventListener("click", () => {
+      const editLinkForm = document.getElementById("edit-link-form");
+      if (editLinkForm) {
+        editLinkForm.style.display = "none";
       }
     });
   }
@@ -939,4 +1016,292 @@ document.addEventListener("DOMContentLoaded", function() {
   } catch (error) {
     console.error("Fehler beim Einrichten der Tab-Listener:", error);
   }
+
+  loadCategoriesData();
 });
+
+// Kategorien und Bookmarks für das aktuelle Topic anzeigen
+function renderCategories() {
+  const categoriesList = document.getElementById("bookmark-categories");
+  const linksSection = document.getElementById("bookmark-links-section");
+  const linksList = document.getElementById("bookmark-links");
+  const selectedCategoryName = document.getElementById("selected-category-name");
+
+  if (!categoriesList || !linksSection || !linksList || !selectedCategoryName) return;
+
+  categoriesList.innerHTML = "";
+  linksList.innerHTML = "";
+  linksSection.style.display = "none";
+
+  if (currentTopicIndex === -1 || !topicsData[currentTopicIndex] || !topicsData[currentTopicIndex].categories || topicsData[currentTopicIndex].categories.length === 0) {
+    categoriesList.innerHTML = "<li class='empty-list'>No categories yet. Add your first category!</li>";
+    return;
+  }
+
+  topicsData[currentTopicIndex].categories.forEach((category, index) => {
+    const li = document.createElement("li");
+    li.className = "category-item";
+    li.dataset.id = index;
+    li.innerHTML = `
+      <span class="category-text">${escapeHTML(category.name)}</span>
+      <div class="category-actions">
+        <button class="edit-btn" title="Edit Category"><i class="fas fa-edit"></i></button>
+        <button class="delete-btn" title="Delete Category"><i class="fas fa-trash"></i></button>
+      </div>
+    `;
+
+    li.addEventListener("click", () => {
+      renderBookmarks(index);
+    });
+
+    li.querySelector(".edit-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      startEditCategory(index, category.name);
+    });
+
+    li.querySelector(".delete-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteCategory(index);
+    });
+
+    categoriesList.appendChild(li);
+  });
+}
+
+// Bookmarks für eine Kategorie anzeigen
+function renderBookmarks(categoryIndex) {
+  const linksSection = document.getElementById("bookmark-links-section");
+  const linksList = document.getElementById("bookmark-links");
+  const selectedCategoryName = document.getElementById("selected-category-name");
+
+  if (!linksSection || !linksList || !selectedCategoryName) return;
+
+  const category = topicsData[currentTopicIndex]?.categories[categoryIndex];
+  if (!category) return;
+
+  selectedCategoryName.textContent = category.name;
+  linksList.innerHTML = "";
+  linksSection.style.display = "block";
+
+  if (!category.bookmarks || category.bookmarks.length === 0) {
+    linksList.innerHTML = "<li class='empty-list'>No bookmarks yet. Add your first bookmark!</li>";
+    return;
+  }
+
+  category.bookmarks.forEach((bookmark, index) => {
+    const li = document.createElement("li");
+    li.className = "link-item";
+    li.dataset.id = index;
+    li.innerHTML = `
+      <span class="link-text">${escapeHTML(bookmark.title)}</span>
+      <span class="link-url">${escapeHTML(bookmark.url)}</span>
+      <div class="link-actions">
+        <button class="edit-btn" title="Edit Bookmark"><i class="fas fa-edit"></i></button>
+        <button class="delete-btn" title="Delete Bookmark"><i class="fas fa-trash"></i></button>
+      </div>
+    `;
+
+    li.addEventListener("click", () => {
+      openBookmark(bookmark.url);
+    });
+
+    li.querySelector(".edit-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      startEditBookmark(categoryIndex, index, bookmark);
+    });
+
+    li.querySelector(".delete-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteBookmark(categoryIndex, index);
+    });
+
+    linksList.appendChild(li);
+  });
+}
+
+// Funktion zum Öffnen eines Bookmarks in einem neuen Tab
+function openBookmark(url) {
+  if (!url) return;
+
+  // Ensure the URL is absolute
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = "https://" + url; // Default to HTTPS if no protocol is provided
+  }
+
+  if (hasFirefoxAPI) {
+    browser.tabs.create({ url }).catch((err) => console.error("Error opening bookmark:", err));
+  } else {
+    window.open(url, "_blank");
+  }
+}
+
+// Kategorie hinzufügen
+function addCategory() {
+  const input = document.getElementById("new-category-input");
+  if (!input || !input.value.trim()) return;
+
+  const categoryName = input.value.trim();
+  if (!topicsData[currentTopicIndex].categories) {
+    topicsData[currentTopicIndex].categories = [];
+  }
+
+  topicsData[currentTopicIndex].categories.push({ name: categoryName, bookmarks: [] });
+  input.value = "";
+  document.getElementById("add-category-form").style.display = "none";
+  saveTopicsData();
+  renderCategories();
+}
+
+// Kategorie bearbeiten
+function startEditCategory(index, name) {
+  const input = document.getElementById("edit-category-input");
+  const form = document.getElementById("edit-category-form");
+  const hiddenId = document.getElementById("edit-category-id");
+
+  if (!input || !form || !hiddenId) return;
+
+  input.value = name;
+  hiddenId.value = index;
+  form.style.display = "block";
+}
+
+function saveEditedCategory() {
+  const input = document.getElementById("edit-category-input");
+  const hiddenId = document.getElementById("edit-category-id");
+
+  if (!input || !hiddenId || !input.value.trim()) return;
+
+  const index = parseInt(hiddenId.value, 10);
+  if (isNaN(index) || !topicsData[currentTopicIndex].categories || !topicsData[currentTopicIndex].categories[index]) return;
+
+  topicsData[currentTopicIndex].categories[index].name = input.value.trim();
+  input.value = "";
+  hiddenId.value = "";
+  document.getElementById("edit-category-form").style.display = "none";
+  saveTopicsData();
+  renderCategories();
+}
+
+// Kategorie löschen
+function deleteCategory(index) {
+  if (!topicsData[currentTopicIndex].categories || !topicsData[currentTopicIndex].categories[index]) return;
+
+  topicsData[currentTopicIndex].categories.splice(index, 1);
+  saveTopicsData();
+  renderCategories();
+}
+
+// Bookmark hinzufügen
+function addBookmark(categoryIndex) {
+  const titleInput = document.getElementById("new-link-title-input");
+  const urlInput = document.getElementById("new-link-url-input");
+
+  if (!titleInput || !urlInput || !titleInput.value.trim() || !urlInput.value.trim()) {
+    alert("Both title and URL are required to add a bookmark.");
+    return;
+  }
+
+  const bookmark = { title: titleInput.value.trim(), url: urlInput.value.trim() };
+  if (!topicsData[currentTopicIndex].categories[categoryIndex].bookmarks) {
+    topicsData[currentTopicIndex].categories[categoryIndex].bookmarks = [];
+  }
+
+  topicsData[currentTopicIndex].categories[categoryIndex].bookmarks.push(bookmark);
+
+  titleInput.value = "";
+  urlInput.value = "";
+  document.getElementById("add-link-form").style.display = "none";
+  saveTopicsData();
+  renderBookmarks(categoryIndex);
+}
+
+// Bookmark bearbeiten
+function startEditBookmark(categoryIndex, bookmarkIndex, bookmark) {
+  const titleInput = document.getElementById("edit-link-title-input");
+  const urlInput = document.getElementById("edit-link-url-input");
+  const hiddenId = document.getElementById("edit-link-id");
+
+  if (!titleInput || !urlInput || !hiddenId) return;
+
+  titleInput.value = bookmark.title;
+  urlInput.value = bookmark.url;
+  hiddenId.value = `${categoryIndex},${bookmarkIndex}`;
+  document.getElementById("edit-link-form").style.display = "block";
+}
+
+function saveEditedBookmark() {
+  const titleInput = document.getElementById("edit-link-title-input");
+  const urlInput = document.getElementById("edit-link-url-input");
+  const hiddenId = document.getElementById("edit-link-id");
+
+  if (!titleInput || !urlInput || !hiddenId || !titleInput.value.trim() || !urlInput.value.trim()) return;
+
+  const [categoryIndex, bookmarkIndex] = hiddenId.value.split(",").map(Number);
+  if (
+    isNaN(categoryIndex) ||
+    isNaN(bookmarkIndex) ||
+    !topicsData[currentTopicIndex].categories ||
+    !topicsData[currentTopicIndex].categories[categoryIndex] ||
+    !topicsData[currentTopicIndex].categories[categoryIndex].bookmarks[bookmarkIndex]
+  ) {
+    return;
+  }
+
+  topicsData[currentTopicIndex].categories[categoryIndex].bookmarks[bookmarkIndex] = {
+    title: titleInput.value.trim(),
+    url: urlInput.value.trim(),
+  };
+
+  titleInput.value = "";
+  urlInput.value = "";
+  hiddenId.value = "";
+  document.getElementById("edit-link-form").style.display = "none";
+  saveTopicsData();
+  renderBookmarks(categoryIndex);
+}
+
+// Bookmark löschen
+function deleteBookmark(categoryIndex, bookmarkIndex) {
+  if (
+    !topicsData[currentTopicIndex].categories ||
+    !topicsData[currentTopicIndex].categories[categoryIndex] ||
+    !topicsData[currentTopicIndex].categories[categoryIndex].bookmarks[bookmarkIndex]
+  ) {
+    return;
+  }
+
+  topicsData[currentTopicIndex].categories[categoryIndex].bookmarks.splice(bookmarkIndex, 1);
+  saveTopicsData();
+  renderBookmarks(categoryIndex);
+}
+
+// Daten speichern und laden
+function saveCategoriesData() {
+  if (hasFirefoxAPI) {
+    browser.storage.local.set({ categoriesData }).catch((err) => console.error("Fehler beim Speichern der Kategorien:", err));
+  } else {
+    try {
+      localStorage.setItem("categoriesData", JSON.stringify(categoriesData));
+    } catch (e) {
+      console.error("Fehler beim Speichern der Kategorien:", e);
+    }
+  }
+}
+
+function loadCategoriesData() {
+  if (hasFirefoxAPI) {
+    browser.storage.local.get("categoriesData").then((result) => {
+      categoriesData = result.categoriesData || {};
+      renderCategories();
+    });
+  } else {
+    try {
+      const data = localStorage.getItem("categoriesData");
+      categoriesData = data ? JSON.parse(data) : {};
+      renderCategories();
+    } catch (e) {
+      console.error("Fehler beim Laden der Kategorien:", e);
+      categoriesData = {};
+    }
+  }
+}

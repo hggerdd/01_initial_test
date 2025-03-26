@@ -1,3 +1,8 @@
+
+the current sidebar.js is way too big and not maintanable. refactor the application by splitting the sidebar.js into useful
+modules. Eg. think about sidebar, topics, categories, bookmarks and tab_management. if useful also add a utils with 
+reused functions.
+
 Ich habe ein komplettes Bookmark-System für die Firefox-Erweiterung erstellt. Hier ist ein Überblick der Funktionen:
 Neue Funktionen
 
