@@ -1,0 +1,57 @@
+Ich habe ein komplettes Bookmark-System für die Firefox-Erweiterung erstellt. Hier ist ein Überblick der Funktionen:
+Neue Funktionen
+
+Bookmark-Kategorien für jedes Topic
+
+Benutzer können Kategorien erstellen (z.B. "Dateien", "Termine")
+Kategorien können bearbeitet und gelöscht werden
+Pro Topic können beliebig viele Kategorien angelegt werden
+
+
+Links innerhalb jeder Kategorie
+
+Benutzer können Links mit Titel und URL speichern
+Links können direkt aus dem aktuellen Tab übernommen werden
+Links können bearbeitet und gelöscht werden
+Klick auf einen Link öffnet diesen im aktiven Tab
+
+
+Benutzerfreundliche Oberfläche
+
+Übersichtliche Listen für Kategorien und Links
+Formulare zum Hinzufügen und Bearbeiten
+Button zum Übernehmen der aktuellen Tab-URL
+Validierung der eingegebenen URLs
+
+
+
+Implementierung
+Die Implementierung besteht aus drei Teilen:
+
+HTML-Struktur (sidebar-html-update)
+
+Listen für Kategorien und Links
+Formulare zum Hinzufügen und Bearbeiten
+Button zum Übernehmen der aktuellen Tab-URL
+
+
+CSS-Styling (sidebar-css-update)
+
+Anpassung an das bestehende Design
+Spezielle Styles für Kategorien und Links
+Kompaktes Layout für maximale Übersichtlichkeit
+
+
+JavaScript-Funktionalität (sidebar-js-update)
+
+Datenstrukturerweiterung für Bookmarks
+Funktionen zum Hinzufügen, Bearbeiten und Löschen
+Integration mit dem bestehenden Topic-System
+URL-Validierung und Tab-Handling
+
+
+
+Integration
+Die Anleitung (integration-guide) erklärt, wie du die einzelnen Teile in die bestehende Erweiterung integrieren kannst. Dabei wird besonders auf die wichtigen Änderungspunkte im JavaScript-Code eingegangen.
+Die Bookmark-Daten werden zusammen mit den Topic-Daten gespeichert und bleiben so auch nach einem Neustart des Browsers erhalten. Die Darstellung der Bookmarks wird automatisch aktualisiert, wenn der Benutzer zwischen Topics wechselt.
+Diese Ergänzung macht deine Erweiterung noch nützlicher, da Benutzer jetzt nicht nur Tabs organisieren, sondern auch wichtige Links pro Topic speichern können.
