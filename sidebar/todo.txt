@@ -1,7 +1,49 @@
 
-the current sidebar.js is way too big and not maintanable. refactor the application by splitting the sidebar.js into useful
+make the topic list reorderable with drag and drop
+
+make the list of categories reorderable with drag and drop
+
+make the list of bookmarks reorderable with drag and drop
+
+download and upload the definition of topics/categories/bookmarks
+
+counting of open tabs per topic, must be updated immediatly when tabs are created or closed
+
+[x] the current sidebar.js is way too big and not maintanable. refactor the application by splitting the sidebar.js into useful
 modules. Eg. think about sidebar, topics, categories, bookmarks and tab_management. if useful also add a utils with 
 reused functions.
+
+##########################################################################
+# Add the logic for change of topics
+###########################################################################
+think about the following steps how to do it. please make it complete and implement the steps. also include and analyse sidebar.js and sidebar.html if there might be a failure or a part of code that is contrary.
+
+1. when changing the topic be sure to now what is the source topic and the target topic. I will call them topicx for the deselected topic and topicy for the newly selected topic.
+2. get to know the ids for topicx and topicy
+3. All currently open tabs belong to topix per definition. put them into the mapping list (map all tabs (tab id) currently open (ungrouped) to topicx).
+3. make sure in the list each tab is there only once (tab id is unique in the mapping table). A tab is per definition only assigned to one time.
+4. look into the mapping table which tabs belong to topicy.
+5. move all tabs for topicx from the ungrouped state to the tab group (to not have them in the head of the main firefox window anymore). 
+6. move all tabs that belong to topicy to the ungrouped state to show them.
+
+Additionally make sure every time a new tab is created or delete by the user, the mapping list is also updated. New tabs are added to the currently open topic. if you delete a tab, also make sure in the mapping table the link between topic and tab is deleted. 
+
+when the user changes anything with the tabs (open, add, close) also update the number of tabs per topic (update the text field in brakets behind the topic name). 
+
+Make sure to add for each of the numbered steps above a debug message. Add to the message [Tab manager][topic change] to better understand what we are doing now.
+########################################
+
+there has been a lot of "... is not a function" failures until now. Check explicitly that the flows and used functions are available from the respective parts of the code.
+
+Uncaught (in promise) TypeError: browser.tabs.group is not a function
+    switchToTopic moz-extension://185569d5-aa2f-446d-bfa6-4f847ac1ec2f/sidebar/js/modules/tab_manager.js:75
+    initializeData moz-extension://185569d5-aa2f-446d-bfa6-4f847ac1ec2f/sidebar/js/sidebar.js:150
+    promise callback*loadData moz-extension://185569d5-aa2f-446d-bfa6-4f847ac1ec2f/sidebar/js/sidebar.js:83
+    <anonymous> moz-extension://185569d5-aa2f-446d-bfa6-4f847ac1ec2f/sidebar/js/sidebar.js:53
+    async* moz-extension://185569d5-aa2f-446d-bfa6-4f847ac1ec2f/sidebar/js/sidebar.js:11
+tab_manager.js:75:26
+
+
 
 Ich habe ein komplettes Bookmark-System für die Firefox-Erweiterung erstellt. Hier ist ein Überblick der Funktionen:
 Neue Funktionen
