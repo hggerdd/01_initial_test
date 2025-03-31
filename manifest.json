@@ -29,5 +29,11 @@
       "tabs",
       "tabHide",
       "sessions"
+    ],
+    "background": {
+      "scripts": ["background.js"]
+    },
+    "web_accessible_resources": [
+      "modals/*"
     ]
 }

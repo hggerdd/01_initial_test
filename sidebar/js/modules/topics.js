@@ -4,6 +4,7 @@ export class TopicManager {
   constructor(elements, hasFirefoxAPI) {
     this.elements = elements;
     this.hasFirefoxAPI = hasFirefoxAPI;
+    this.onTopicAdd = null;
     this.callbacks = {
       onTopicSelect: null,
       onTopicEdit: null,
@@ -14,6 +15,15 @@ export class TopicManager {
       draggedIndex: -1,
       dropTarget: null
     };
+
+    // Set up message listener for modal responses
+    if (this.hasFirefoxAPI) {
+      browser.runtime.onMessage.addListener((message) => {
+        if (message.type === 'modalResponse') {
+          this.handleModalResponse(message);
+        }
+      });
+    }
   }
 
   // Add method to set callbacks
@@ -271,88 +281,47 @@ export class TopicManager {
   }
 
   setupTopicFormListeners(elements, onTopicAdd) {
+    // Store callback for modal responses
+    this.onTopicAdd = onTopicAdd;
+
+    // Add topic button opens the modal
     if (elements.addTopicBtn) {
       elements.addTopicBtn.addEventListener('click', () => {
-        elements.newTopicForm.style.display = 'block';
-        elements.newTopicInput.focus();
-      });
-    }
-
-    if (elements.saveNewTopicBtn) {
-      elements.saveNewTopicBtn.addEventListener('click', async () => {
-        const name = elements.newTopicInput.value.trim();
-        if (name) {
-          const topic = await this.addNewTopic(name);
-          if (topic) {
-            onTopicAdd(topic);
-            elements.newTopicForm.style.display = 'none';
-            elements.newTopicInput.value = '';
-          }
+        if (this.hasFirefoxAPI) {
+          this.openAddTopicModal();
         }
       });
     }
+  }
 
-    if (elements.cancelNewTopicBtn) {
-      elements.cancelNewTopicBtn.addEventListener('click', () => {
-        elements.newTopicForm.style.display = 'none';
-        elements.newTopicInput.value = '';
+  openAddTopicModal() {
+    if (this.hasFirefoxAPI) {
+      // Get the extension URL for the modal
+      const modalUrl = browser.runtime.getURL('modals/add-topic.html');
+      browser.windows.create({
+        url: modalUrl,
+        type: 'popup',
+        width: 400,
+        height: 200,
+        allowScriptsToClose: true
+      }).catch(err => {
+        console.error('Error opening modal:', err);
+        alert('Failed to open add topic dialog');
       });
     }
+  }
 
-    // Handle enter key in new topic input
-    if (elements.newTopicInput) {
-      elements.newTopicInput.addEventListener('keyup', async (e) => {
-        if (e.key === 'Enter') {
-          const name = elements.newTopicInput.value.trim();
-          if (name) {
-            const topic = await this.addNewTopic(name);
-            if (topic) {
-              onTopicAdd(topic);
-              elements.newTopicForm.style.display = 'none';
-              elements.newTopicInput.value = '';
-            }
-          }
+  async handleModalResponse(message) {
+    try {
+      if (message.success && message.topicName) {
+        console.log('Received modal response:', message);
+        const topic = await this.addNewTopic(message.topicName);
+        if (topic && this.onTopicAdd) {
+          await this.onTopicAdd(topic);
         }
-      });
-    }
-
-    // Update edit topic form handlers
-    const saveEditBtn = document.getElementById("save-edit-topic-btn");
-    const cancelEditBtn = document.getElementById("cancel-edit-topic-btn");
-    const editForm = elements.editTopicForm;
-    const editInput = elements.editTopicInput;
-    const editId = elements.editTopicId;
-
-    if (saveEditBtn && editInput && editId) {
-      saveEditBtn.addEventListener('click', () => {
-        const name = editInput.value.trim();
-        const index = parseInt(editId.value);
-        if (name && !isNaN(index) && this.callbacks.onTopicEdit) {
-          this.callbacks.onTopicEdit(index, name);
-          editForm.style.display = 'none';
-          editInput.value = '';
-        }
-      });
-
-      // Add keyboard support
-      editInput.addEventListener('keyup', (e) => {
-        if (e.key === 'Enter') {
-          const name = editInput.value.trim();
-          const index = parseInt(editId.value);
-          if (name && !isNaN(index) && this.callbacks.onTopicEdit) {
-            this.callbacks.onTopicEdit(index, name);
-            editForm.style.display = 'none';
-            editInput.value = '';
-          }
-        }
-      });
-    }
-
-    if (cancelEditBtn && editForm) {
-      cancelEditBtn.addEventListener('click', () => {
-        editForm.style.display = 'none';
-        if (editInput) editInput.value = '';
-      });
+      }
+    } catch (error) {
+      console.error('Error handling modal response:', error);
     }
   }
 }
