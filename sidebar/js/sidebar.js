@@ -2,11 +2,12 @@ import { TopicManager } from './modules/topics.js';
 import { CategoryManager } from './modules/categories.js';
 import { BookmarkManager } from './modules/bookmarks.js';
 import { TabManager } from './modules/tab_manager.js';
+import { DataManager } from './modules/data_manager.js';
 
 const hasFirefoxAPI = typeof browser !== 'undefined' && browser.storage;
 let topicsData = [];
 let currentTopicIndex = -1;
-let tabManager, topicManager, categoryManager, bookmarkManager;
+let tabManager, topicManager, categoryManager, bookmarkManager, dataManager;
 
 document.addEventListener("DOMContentLoaded", async function() {
   try {
@@ -17,11 +18,6 @@ document.addEventListener("DOMContentLoaded", async function() {
     
     // Initialize managers in correct order
     tabManager = new TabManager(hasFirefoxAPI);
-    if (!tabManager.initialize || !tabManager.switchToTopic || !tabManager.setupTabListeners) {
-      throw new Error('TabManager missing required methods');
-    }
-
-    // Initialize tab manager first with empty topics data
     await tabManager.initialize(topicsData);
     
     // Set up tab change handler
@@ -44,12 +40,15 @@ document.addEventListener("DOMContentLoaded", async function() {
       editTopicInput: document.getElementById("edit-topic-input"),
       editTopicId: document.getElementById("edit-topic-id"),
       saveEditTopicBtn: document.getElementById("save-edit-topic-btn"),
-      cancelEditTopicBtn: document.getElementById("cancel-edit-topic-btn")
+      cancelEditTopicBtn: document.getElementById("cancel-edit-topic-btn"),
+      saveDataBtn: document.getElementById("save-data-btn"),
+      loadDataBtn: document.getElementById("load-data-btn")
     };
 
     topicManager = new TopicManager(elements, hasFirefoxAPI);
     categoryManager = new CategoryManager(hasFirefoxAPI);
     bookmarkManager = new BookmarkManager(hasFirefoxAPI);
+    dataManager = new DataManager(hasFirefoxAPI);
 
     // Set up callbacks BEFORE initialization
     topicManager.setCallbacks({
@@ -64,11 +63,38 @@ document.addEventListener("DOMContentLoaded", async function() {
       onCategoryDelete: deleteCategory
     });
 
-    // Add bookmark callbacks
     bookmarkManager.setCallbacks({
       onBookmarkEdit: startEditBookmark,
       onBookmarkDelete: deleteBookmark
     });
+
+    dataManager.setCallbacks({
+      onDataImported: async (data) => {
+        // Save current tabs before switching
+        if (currentTopicIndex !== -1) {
+          await tabManager.saveCurrentTabs(currentTopicIndex, topicsData);
+        }
+
+        topicsData = data.topicsData;
+        currentTopicIndex = data.currentTopicIndex;
+
+        // Save to storage
+        await topicManager.saveTopicsData(topicsData, currentTopicIndex);
+
+        // Update UI
+        topicManager.renderTopics(topicsData, currentTopicIndex);
+        if (currentTopicIndex !== -1) {
+          categoryManager.renderCategories(topicsData, currentTopicIndex);
+          if (hasFirefoxAPI) {
+            await tabManager.switchToTopic(currentTopicIndex, topicsData);
+          }
+        }
+      },
+      onError: (message) => alert(message)
+    });
+
+    // Setup data management event listeners
+    dataManager.setupEventListeners(elements, topicsData, currentTopicIndex);
 
     setupEventListeners();
     loadData();

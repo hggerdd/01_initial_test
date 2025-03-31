@@ -286,3 +286,36 @@ input[type="text"] {
 #bookmark-links-section {
   margin-top: 10px;
 }
+
+#data-management {
+  margin-top: auto;
+  padding: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  border-top: 1px solid #333;
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background-color: #2c2c2c;
+  color: #888;
+  border: 1px solid #444;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  background-color: #3c3c3c;
+  color: #fff;
+}
+
+.icon-btn i {
+  font-size: 14px;
+}
