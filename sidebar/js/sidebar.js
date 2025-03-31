@@ -59,7 +59,7 @@ document.addEventListener("DOMContentLoaded", async function() {
     // Add bookmark callbacks
     bookmarkManager.setCallbacks({
       onBookmarkEdit: startEditBookmark,
-      onBookmarkDelete: deleteBookmark
+      onBookmarkDelete: deleteBookmark 
     });
 
     setupEventListeners();
