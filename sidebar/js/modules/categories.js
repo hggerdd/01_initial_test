@@ -3,24 +3,11 @@ import { escapeHTML } from './utils.js';
 export class CategoryManager {
   constructor(hasFirefoxAPI) {
     this.hasFirefoxAPI = hasFirefoxAPI;
-    this.currentState = {
-      topicsData: null,
-      currentTopicIndex: -1
-    };
     this.callbacks = {
       onCategorySelect: null,
       onCategoryEdit: null,
-      onCategoryDelete: null,
-      onStateChange: null
+      onCategoryDelete: null
     };
-  }
-
-  setState(newState) {
-    this.currentState = { ...this.currentState, ...newState };
-    // Notify state changes
-    if (this.callbacks.onStateChange) {
-      this.callbacks.onStateChange(this.currentState);
-    }
   }
 
   setCallbacks(callbacks) {
@@ -28,17 +15,11 @@ export class CategoryManager {
   }
 
   renderCategories(topicsData, currentTopicIndex) {
-    this.setState({ topicsData, currentTopicIndex });
-    
     const categoriesList = document.getElementById("bookmark-categories");
     if (!categoriesList) return;
 
     const currentTopic = topicsData[currentTopicIndex];
-    if (!currentTopic?.categories) {
-      // Initialize categories array if it doesn't exist
-      if (currentTopic) {
-        currentTopic.categories = [];
-      }
+    if (!currentTopic || !currentTopic.categories) {
       categoriesList.innerHTML = "<li class='empty-list'>No categories yet.</li>";
       return;
     }
@@ -48,7 +29,7 @@ export class CategoryManager {
   }
 
   generateCategoriesHTML(categories) {
-    if (!categories?.length) {
+    if (categories.length === 0) {
       return "<li class='empty-list'>No categories yet.</li>";
     }
 
@@ -71,10 +52,7 @@ export class CategoryManager {
     items.forEach((item, index) => {
       item.addEventListener('click', (e) => {
         if (!e.target.closest('.edit-btn') && !e.target.closest('.delete-btn')) {
-          // Ensure the category exists before triggering selection
-          if (categories[index]) {
-            this.callbacks.onCategorySelect?.(index);
-          }
+          this.callbacks.onCategorySelect?.(index);
         }
       });
 
@@ -82,9 +60,7 @@ export class CategoryManager {
       if (editBtn) {
         editBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (categories[index]) {
-            this.callbacks.onCategoryEdit?.(index, categories[index].name);
-          }
+          this.callbacks.onCategoryEdit?.(index, categories[index].name);
         });
       }
 
@@ -107,10 +83,6 @@ export class CategoryManager {
 
     if (addBtn) {
       addBtn.addEventListener('click', () => {
-        if (this.currentState.currentTopicIndex === -1) {
-          alert('Please select a topic first');
-          return;
-        }
         form.style.display = 'block';
         input.focus();
       });

@@ -1,538 +1,593 @@
 /**
- * TabManager - Handles Firefox tab management by topic with strict assignments
+ * TabManager - Verwalte Tabs nach Topics in einer Firefox-Erweiterung.
+ *
+ * Diese Klasse ermöglicht es, Tabs anhand von Themen zu gruppieren:
+ * - Beim Wechsel eines Topics werden aktuell sichtbare Tabs in einen versteckten Bereich (Gruppe)
+ *   verschoben.
+ * - Tabs, die zum neuen Topic gehören, werden wieder sichtbar gemacht.
+ *
+ * Abhängigkeiten:
+ * - Firefox WebExtensions API (MDN: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions)
+ * - Optional: Tab Groups API (browser.tabs.group / ungroup) und Tab Hide/Show API
+ *
+ * Hinweis: Die Tab Hide/Show API ist experimentell und erfordert ggf. spezielle Berechtigungen.
  */
 export class TabManager {
-  constructor(hasFirefoxAPI = true) {
-    this.hasFirefoxAPI = hasFirefoxAPI;
-    this.tabToTopicMap = new Map(); // Once assigned, never changes until tab closes
-    this.currentTopicIndex = -1;
-    this.hasTabHideAPI = this.checkTabHideAPI();
-    this.DEBUG = true;
-    this.onTabsChanged = null; // Callback for tab changes
-  }
-
-  log(...args) {
-    if (this.DEBUG) console.log("[TabManager]", ...args);
-  }
-
-  // API checks
-  checkTabHideAPI() {
-    try {
-      return typeof browser !== 'undefined' && 
-             browser.tabs && 
-             typeof browser.tabs.hide === 'function' &&
-             typeof browser.tabs.show === 'function';
-    } catch (e) {
-      return false;
-    }
-  }
-
-  isRegularTab(url) {
-    return url && 
-           !url.startsWith("about:") && 
-           !url.startsWith("chrome:") && 
-           !url.startsWith("moz-extension:") &&
-           url !== "about:blank";
-  }
-
-  // INITIALIZATION
-  async initialize(topicsData) {
-    if (!this.hasFirefoxAPI) return;
-    
-    try {
-      if (!this.hasTabHideAPI) {
-        this.log("[ERROR] Tab Hide API not available");
-        return;
-      }
-      
-      // Get all tabs
-      const allTabs = await browser.tabs.query({});
-      const regularTabs = allTabs.filter(tab => this.isRegularTab(tab.url));
-      this.log(`[init] Found ${regularTabs.length} regular tabs`);
-      
-      // Set initial topic if needed
-      if (this.currentTopicIndex === -1 && topicsData?.length > 0) {
-        this.currentTopicIndex = 0;
-        this.log(`[init] Setting initial topic: ${this.currentTopicIndex}`);
-      }
-      
-      // Assign tabs to topics - ONLY for tabs not yet assigned
-      await this.assignInitialTabs(regularTabs, topicsData);
-      
-      // Enforce visibility based on current topic
-      await this.enforceTabVisibility();
-      
-      // Setup event listeners
-      this.setupTabListeners(topicsData);
-      
-      // Update UI
-      await this.updateTabsOverview(topicsData);
-      
-      this.log(`[init] Initialization complete, current topic: ${this.currentTopicIndex}`);
-    } catch (e) {
-      this.log(`[ERROR] Initialization failed: ${e.message}`);
-    }
-  }
+    constructor(hasFirefoxAPI = true) {
+      this.hasFirefoxAPI = hasFirefoxAPI;
+      this.hiddenGroupId = null;
+      // Map, die Tab-IDs auf den zugehörigen Topic-Index abbildet.
+      this.tabToTopicMap = new Map();
+      this.currentTopicIndex = -1;
   
-  async assignInitialTabs(regularTabs, topicsData) {
-    this.log(`[init] Assigning initial tabs to topics`);
-    const assignedTabs = new Set();
-    
-    // First, try to match tabs to topics based on saved URLs
-    if (topicsData?.length > 0) {
-      for (let topicIndex = 0; topicIndex < topicsData.length; topicIndex++) {
-        const topic = topicsData[topicIndex];
-        if (!topic.tabs || !topic.tabs.length) continue;
-        
-        topic.tabs.forEach(savedTab => {
-          const matchingTab = regularTabs.find(tab => 
-            tab.url === savedTab.url && 
-            !assignedTabs.has(tab.id) && 
-            !this.tabToTopicMap.has(tab.id)
-          );
-          
-          if (matchingTab) {
-            this.tabToTopicMap.set(matchingTab.id, topicIndex);
-            assignedTabs.add(matchingTab.id);
-            this.log(`[init] Matched tab ${matchingTab.id} to topic ${topicIndex}`);
-          }
-        });
+      // Prüfe, ob die nötigen APIs verfügbar sind.
+      this.hasTabGroupsAPI = this.checkTabGroupsAPI();
+      this.hasTabHideAPI = this.checkTabHideAPI();
+  
+      this.log("Tab Groups API available:", this.hasTabGroupsAPI);
+      this.log("Tab Hide API available:", this.hasTabHideAPI);
+  
+      if (!this.hasTabGroupsAPI && !this.hasTabHideAPI) {
+        this.log("[WARNING] Weder Tab Groups noch Tab Hide APIs sind verfügbar!");
       }
     }
-    
-    // Then, assign remaining tabs to current topic
-    regularTabs.forEach(tab => {
-      if (!assignedTabs.has(tab.id) && !this.tabToTopicMap.has(tab.id)) {
-        this.tabToTopicMap.set(tab.id, this.currentTopicIndex);
-        this.log(`[init] Assigned new tab ${tab.id} to current topic ${this.currentTopicIndex}`);
-      }
-    });
-    
-    // Print summary of tab assignments
-    this.logTabAssignments(topicsData);
-  }
   
-  async enforceTabVisibility() {
-    if (this.currentTopicIndex < 0) return;
-    
-    try {
-      const allTabs = await browser.tabs.query({});
-      const regularTabs = allTabs.filter(tab => this.isRegularTab(tab.url));
-      
-      const tabsToShow = [];
-      const tabsToHide = [];
-      
-      // Categorize tabs
-      regularTabs.forEach(tab => {
-        const tabTopic = this.tabToTopicMap.get(tab.id);
-        
-        if (tabTopic === this.currentTopicIndex) {
-          if (tab.hidden) {
-            tabsToShow.push(tab.id);
-          }
-        } else {
-          if (!tab.hidden) {
-            tabsToHide.push(tab.id);
-          }
-        }
-      });
-      
-      // First hide tabs that should be hidden
-      if (tabsToHide.length > 0) {
-        this.log(`[enforce] Hiding ${tabsToHide.length} tabs not in current topic`);
-        await browser.tabs.hide(tabsToHide);
-      }
-      
-      // Then show tabs that should be visible
-      if (tabsToShow.length > 0) {
-        this.log(`[enforce] Showing ${tabsToShow.length} tabs for current topic`);
-        await browser.tabs.show(tabsToShow);
-      }
-      
-      // Verify the results
-      await this.verifyTabVisibility();
-      
-    } catch (e) {
-      this.log(`[ERROR] enforceTabVisibility failed: ${e.message}`);
-    }
-  }
-  
-  // TOPIC SWITCHING
-  async switchToTopic(topicIndex, topicsData) {
-    if (!this.hasFirefoxAPI || !this.hasTabHideAPI) return false;
-    
-    try {
-      // Validate inputs
-      if (!topicsData || topicIndex < 0 || topicIndex >= topicsData.length) {
-        this.log(`[ERROR] Invalid topic index: ${topicIndex}`);
+    /**
+     * Prüft, ob die Tab Groups API verfügbar ist.
+     */
+    checkTabGroupsAPI() {
+      try {
+        return typeof browser !== 'undefined' &&
+               browser.tabs &&
+               typeof browser.tabs.group === 'function' &&
+               typeof browser.tabs.ungroup === 'function';
+      } catch (e) {
         return false;
       }
-      
-      // Skip if already on this topic
-      if (topicIndex === this.currentTopicIndex) {
-        this.log(`[switch] Already on topic ${topicIndex}, skipping`);
-        return true;
+    }
+  
+    /**
+     * Prüft, ob die Tab Hide/Show API verfügbar ist.
+     */
+    checkTabHideAPI() {
+      try {
+        return typeof browser !== 'undefined' &&
+               browser.tabs &&
+               typeof browser.tabs.hide === 'function' &&
+               typeof browser.tabs.show === 'function';
+      } catch (e) {
+        return false;
       }
-      
-      const oldTopicIndex = this.currentTopicIndex;
-      this.log(`[switch] Switching from topic ${oldTopicIndex} to ${topicIndex}`);
-      
-      // Update current topic
-      this.currentTopicIndex = topicIndex;
-      
-      // Get all tabs
+    }
+  
+    /**
+     * Überprüft, ob eine URL zu einem regulären Tab gehört.
+     */
+    isRegularTab(url) {
+      return url &&
+             !url.startsWith("about:") &&
+             !url.startsWith("chrome:") &&
+             !url.startsWith("moz-extension:") &&
+             url !== "about:blank";
+    }
+  
+    /**
+     * Initialisiert den TabManager:
+     * - Erstellt ggf. eine versteckte Tab-Gruppe.
+     * - Liest alle regulären Tabs aus und mappt sie initial auf Topic 0.
+     * - Stellt sicher, dass alle Tabs sichtbar sind.
+     * - Setzt die Tab-Listener.
+     *
+     * @param {Array} topicsData - Array mit Topic-Daten.
+     */
+    async initialize(topicsData) {
+      if (!this.hasFirefoxAPI) return;
+  
+      // Versuche, eine versteckte Gruppe zu erstellen.
+      if (this.hasTabGroupsAPI) {
+        try {
+          const groupId = await browser.tabs.group({ tabIds: [] });
+          if (groupId) {
+            this.hiddenGroupId = groupId;
+            try {
+              await browser.tabGroups.update(this.hiddenGroupId, {
+                title: "Hidden Tabs",
+                collapsed: true
+              });
+              this.log(`[init] Erstellte versteckte Gruppe mit ID: ${this.hiddenGroupId}`);
+            } catch (e) {
+              this.log(`[init] Erstellte Gruppe ${this.hiddenGroupId}, konnte aber den Titel nicht setzen.`);
+            }
+          }
+        } catch (e) {
+          this.log(`[ERROR] Fehler beim Erstellen der Tab-Gruppe: ${e.message}`);
+          this.hasTabGroupsAPI = false;
+        }
+      } else {
+        this.log("[init] Tab Groups API nicht verfügbar – Fallback-Methoden werden genutzt.");
+      }
+  
+      // Alle Tabs abrufen und initial Topic 0 zuordnen.
       const allTabs = await browser.tabs.query({});
       const regularTabs = allTabs.filter(tab => this.isRegularTab(tab.url));
-      
-      // Determine which tabs to hide/show
-      const tabsToHide = [];
-      const tabsToShow = [];
-      
-      for (const tab of regularTabs) {
-        const tabTopic = this.tabToTopicMap.get(tab.id);
-        
-        // If tab belongs to new topic and is hidden, show it
-        if (tabTopic === topicIndex && tab.hidden) {
-          tabsToShow.push(tab.id);
-        } 
-        // If tab doesn't belong to new topic and is visible, hide it
-        else if (tabTopic !== topicIndex && !tab.hidden) {
-          tabsToHide.push(tab.id);
-        }
-      }
-      
-      // First hide tabs that should be hidden
-      if (tabsToHide.length > 0) {
-        this.log(`[switch] Hiding ${tabsToHide.length} tabs not in new topic`);
-        await browser.tabs.hide(tabsToHide);
-      }
-      
-      // Then show tabs for current topic
-      const currentTopicTabs = regularTabs.filter(tab => 
-        this.tabToTopicMap.get(tab.id) === topicIndex
-      );
-      
-      if (tabsToShow.length > 0) {
-        this.log(`[switch] Showing ${tabsToShow.length} tabs for new topic`);
-        await browser.tabs.show(tabsToShow);
-        
-        // Activate a tab if we have any
-        const targetTopic = topicsData[topicIndex];
-        const activeIndex = targetTopic.activeTabIndex || 0;
-        
-        if (currentTopicTabs.length > 0) {
-          const tabToActivate = currentTopicTabs[Math.min(activeIndex, currentTopicTabs.length - 1)].id;
-          await browser.tabs.update(tabToActivate, { active: true });
-          this.log(`[switch] Activated tab ${tabToActivate}`);
-        }
-      } else if (currentTopicTabs.length === 0) {
-        // Create default tab if topic has no tabs
-        await this.createDefaultTab(topicIndex);
-      }
-      
-      // Verify final state
-      await this.verifyTabVisibility();
-      
-      // Update UI
-      await this.updateTabsOverview(topicsData);
-      
-      return true;
-    } catch (e) {
-      this.log(`[ERROR] switchToTopic failed: ${e.message}`);
-      return false;
-    }
-  }
+      this.log(`[init] Gefundene reguläre Tabs: ${regularTabs.length}`);
   
-  // TAB OPERATIONS
-  async saveCurrentTabs(topicIndex, topicsData) {
-    if (!this.hasFirefoxAPI || topicIndex < 0 || !topicsData?.[topicIndex]) return false;
-    
-    try {
-      // Find all tabs belonging to this topic
-      const allTabs = await browser.tabs.query({});
-      const topicTabs = allTabs.filter(tab => 
-        this.isRegularTab(tab.url) && 
-        this.tabToTopicMap.get(tab.id) === topicIndex
-      );
-      
-      this.log(`[save] Saving ${topicTabs.length} tabs for topic ${topicIndex}`);
-      
-      // Update the topic data
-      topicsData[topicIndex].tabs = topicTabs.map(tab => ({
-        url: tab.url,
-        title: tab.title || "Untitled",
-        favIconUrl: tab.favIconUrl || ""
-      }));
-      
-      // Save active tab index if any tab is active
-      const activeTabIndex = topicTabs.findIndex(tab => tab.active);
-      if (activeTabIndex !== -1) {
-        topicsData[topicIndex].activeTabIndex = activeTabIndex;
-      }
-      
-      return true;
-    } catch (e) {
-      this.log(`[ERROR] saveCurrentTabs failed: ${e.message}`);
-      return false;
-    }
-  }
-  
-  async createDefaultTab(topicIndex) {
-    try {
-      this.log(`[default] Creating default tab for topic ${topicIndex}`);
-      const newTab = await browser.tabs.create({
-        url: 'https://www.google.de',
-        active: true
+      regularTabs.forEach(tab => {
+        this.tabToTopicMap.set(tab.id, 0);
+        this.log(`[init] Tab ${tab.id} (${tab.url}) wurde Topic 0 zugeordnet`);
       });
-      
-      // Assign to topic and keep visible
-      this.tabToTopicMap.set(newTab.id, topicIndex);
-      this.log(`[default] Assigned new tab ${newTab.id} to topic ${topicIndex}`);
-      
-      return newTab.id;
-    } catch (e) {
-      this.log(`[ERROR] createDefaultTab failed: ${e.message}`);
-      return null;
-    }
-  }
   
-  async closeTabsForTopic(topicIndex) {
-    try {
-      // Find all tabs for this topic
-      const tabIdsToClose = [];
-      
-      for (const [tabId, mappedTopic] of this.tabToTopicMap.entries()) {
-        if (mappedTopic === topicIndex) {
-          tabIdsToClose.push(tabId);
+      // Alle Tabs sichtbar machen.
+      if (regularTabs.length > 0) {
+        const tabIds = regularTabs.map(tab => tab.id);
+        if (this.hasTabGroupsAPI) {
+          try {
+            await browser.tabs.ungroup(tabIds);
+            this.log(`[init] Alle ${tabIds.length} Tabs wurden entgruppiert.`);
+          } catch (e) {
+            this.log(`[ERROR] Fehler beim Entgruppieren: ${e.message}`);
+          }
+        } else if (this.hasTabHideAPI) {
+          try {
+            await browser.tabs.show(tabIds);
+            this.log(`[init] Alle ${tabIds.length} Tabs wurden mittels Hide/Show API sichtbar gemacht.`);
+          } catch (e) {
+            this.log(`[ERROR] Fehler beim Anzeigen der Tabs: ${e.message}`);
+          }
         }
       }
-      
-      if (tabIdsToClose.length > 0) {
-        this.log(`[close] Closing ${tabIdsToClose.length} tabs for topic ${topicIndex}`);
-        await browser.tabs.remove(tabIdsToClose);
-        
-        // Tab removal listener will handle cleanup of tabToTopicMap
-      }
-      
-      return true;
-    } catch (e) {
-      this.log(`[ERROR] closeTabsForTopic failed: ${e.message}`);
-      return false;
-    }
-  }
   
-  // EVENT HANDLING
-  setupTabListeners(topicsData) {
-    if (!this.hasFirefoxAPI) return;
-    
-    // Tab created
-    browser.tabs.onCreated.addListener(async (tab) => {
-      if (!this.isRegularTab(tab.url)) return;
-      
-      // Only assign tab to a topic if it's not already assigned
-      if (!this.tabToTopicMap.has(tab.id)) {
-        this.log(`[event] New tab created: ${tab.id} (${tab.url})`);
-        
-        // Assign to current topic
-        this.tabToTopicMap.set(tab.id, this.currentTopicIndex);
-        this.log(`[event] Assigned new tab ${tab.id} to current topic ${this.currentTopicIndex}`);
-        
-        // Add to topic data
-        if (topicsData?.[this.currentTopicIndex]?.tabs) {
-          topicsData[this.currentTopicIndex].tabs.push({
-            url: tab.url || "",
+      // Setze das initial aktive Topic auf 0.
+      this.currentTopicIndex = 0;
+      this.setupTabListeners(topicsData);
+    }
+  
+    /**
+     * Wechselt zu einem neuen Topic:
+     * - Speichert zunächst die aktuellen Tabs.
+     * - Bestimmt, welche Tabs angezeigt bzw. versteckt werden sollen.
+     * - Nutzt Tab Groups oder Hide/Show API, um die Sichtbarkeit zu steuern.
+     * - Aktiviert abschließend einen Tab des neuen Topics.
+     *
+     * @param {number} topicIndex - Der Index des neuen Topics.
+     * @param {Array} topicsData - Array mit Topic-Daten (einschließlich URLs und evtl. activeTabIndex).
+     */
+    async switchToTopic(topicIndex, topicsData) {
+      if (!this.hasFirefoxAPI) return;
+  
+      try {
+        if (!topicsData || topicIndex < 0 || topicIndex >= topicsData.length) {
+          this.log(`[ERROR] Ungültiger Topic-Index: ${topicIndex}`);
+          return;
+        }
+  
+        const oldTopicIndex = this.currentTopicIndex;
+        const newTopicIndex = topicIndex;
+  
+        if (oldTopicIndex === newTopicIndex && oldTopicIndex !== -1) {
+          this.log(`[switch] Bereits in Topic ${newTopicIndex}. Kein Wechsel erforderlich.`);
+          return;
+        }
+  
+        this.log(`[switch] Wechsle von Topic ${oldTopicIndex} zu Topic ${newTopicIndex}`);
+  
+        // Speichere zuerst die aktuell sichtbaren Tabs des alten Topics.
+        await this.saveCurrentTabs(oldTopicIndex, topicsData);
+  
+        // Alle Tabs abfragen.
+        const allTabs = await browser.tabs.query({});
+        const regularTabs = allTabs.filter(tab => this.isRegularTab(tab.url));
+  
+        // Ziel-URLs aus dem neuen Topic extrahieren.
+        const targetTopic = topicsData[newTopicIndex];
+        const targetUrls = targetTopic.tabs ? targetTopic.tabs.map(t => t.url) : [];
+        this.log(`[switch] Das neue Topic hat ${targetUrls.length} URLs: ${targetUrls.join(", ")}`);
+  
+        const tabsToShow = [];
+        const tabsToHide = [];
+  
+        // Bestimme, welche Tabs angezeigt bzw. versteckt werden sollen.
+        for (const tab of regularTabs) {
+          if (targetUrls.includes(tab.url)) {
+            tabsToShow.push(tab);
+            this.tabToTopicMap.set(tab.id, newTopicIndex);
+            this.log(`[switch] Tab ${tab.id} (${tab.url}) wird angezeigt.`);
+          } else {
+            tabsToHide.push(tab);
+            if (!this.tabToTopicMap.has(tab.id) && oldTopicIndex >= 0) {
+              this.tabToTopicMap.set(tab.id, oldTopicIndex);
+            }
+            this.log(`[switch] Tab ${tab.id} (${tab.url}) wird versteckt.`);
+          }
+        }
+  
+        // Fehlende Tabs im neuen Topic erstellen.
+        const missingUrls = targetUrls.filter(url => !regularTabs.some(tab => tab.url === url));
+        if (missingUrls.length > 0) {
+          this.log(`[switch] Es fehlen ${missingUrls.length} Tabs im neuen Topic.`);
+          for (const url of missingUrls) {
+            try {
+              const newTab = await browser.tabs.create({ url, active: false });
+              this.log(`[switch] Neuer Tab ${newTab.id} für URL ${url} erstellt.`);
+              this.tabToTopicMap.set(newTab.id, newTopicIndex);
+              tabsToShow.push(newTab);
+            } catch (e) {
+              this.log(`[ERROR] Fehler beim Erstellen eines Tabs für ${url}: ${e.message}`);
+            }
+          }
+        }
+  
+        // Zuerst Tabs verstecken.
+        const tabIdsToHide = tabsToHide.map(tab => tab.id);
+        if (tabIdsToHide.length > 0) {
+          this.log(`[switch] Verstecke Tabs: ${tabIdsToHide.join(", ")}`);
+          if (this.hasTabGroupsAPI && this.hiddenGroupId) {
+            try {
+              await browser.tabs.group({ tabIds: tabIdsToHide, groupId: this.hiddenGroupId });
+              this.log(`[switch] Tabs in Gruppe ${this.hiddenGroupId} gruppiert.`);
+              try {
+                await browser.tabGroups.update(this.hiddenGroupId, { collapsed: true });
+                this.log(`[switch] Versteckte Gruppe wurde eingeklappt.`);
+              } catch (e) {
+                this.log(`[switch] Konnte Gruppe nicht einklappen: ${e.message}`);
+              }
+            } catch (e) {
+              this.log(`[ERROR] Fehler beim Gruppieren der Tabs: ${e.message}`);
+              if (this.hasTabHideAPI) {
+                try {
+                  await browser.tabs.hide(tabIdsToHide);
+                  this.log(`[switch] Fallback: Tabs wurden mittels Hide API versteckt.`);
+                } catch (hideErr) {
+                  this.log(`[ERROR] Hide API Fehler: ${hideErr.message}`);
+                }
+              }
+            }
+          } else if (this.hasTabHideAPI) {
+            try {
+              await browser.tabs.hide(tabIdsToHide);
+              this.log(`[switch] Tabs wurden mittels Hide API versteckt.`);
+            } catch (e) {
+              this.log(`[ERROR] Fehler beim Verstecken der Tabs: ${e.message}`);
+            }
+          } else {
+            this.log(`[WARNING] Keine Methode zum Verstecken der Tabs verfügbar.`);
+          }
+        }
+  
+        // Dann Tabs anzeigen.
+        const tabIdsToShow = tabsToShow.map(tab => tab.id);
+        if (tabIdsToShow.length > 0) {
+          this.log(`[switch] Zeige Tabs: ${tabIdsToShow.join(", ")}`);
+          if (this.hasTabGroupsAPI) {
+            try {
+              await browser.tabs.ungroup(tabIdsToShow);
+              this.log(`[switch] Tabs wurden entgruppiert und sind sichtbar.`);
+            } catch (e) {
+              this.log(`[ERROR] Fehler beim Entgruppieren: ${e.message}`);
+              if (this.hasTabHideAPI) {
+                try {
+                  await browser.tabs.show(tabIdsToShow);
+                  this.log(`[switch] Fallback: Tabs wurden mittels Show API sichtbar gemacht.`);
+                } catch (showErr) {
+                  this.log(`[ERROR] Show API Fehler: ${showErr.message}`);
+                }
+              }
+            }
+          } else if (this.hasTabHideAPI) {
+            try {
+              await browser.tabs.show(tabIdsToShow);
+              this.log(`[switch] Tabs wurden mittels Show API sichtbar gemacht.`);
+            } catch (e) {
+              this.log(`[ERROR] Fehler beim Anzeigen der Tabs: ${e.message}`);
+            }
+          } else {
+            this.log(`[WARNING] Keine Methode zum Anzeigen der Tabs verfügbar.`);
+          }
+        } else {
+          this.log(`[switch] Es gibt keine Tabs, die angezeigt werden sollen für Topic ${newTopicIndex}.`);
+        }
+  
+        // Aktualisiere den aktuellen Topic-Index.
+        this.currentTopicIndex = newTopicIndex;
+  
+        // Aktiviere einen Tab aus den angezeigten Tabs.
+        if (tabsToShow.length > 0) {
+          const activeIndex = targetTopic.activeTabIndex || 0;
+          const tabToActivate = tabsToShow[Math.min(activeIndex, tabsToShow.length - 1)];
+          try {
+            await browser.tabs.update(tabToActivate.id, { active: true });
+            this.log(`[switch] Tab ${tabToActivate.id} wurde aktiviert.`);
+          } catch (e) {
+            this.log(`[ERROR] Fehler beim Aktivieren des Tabs: ${e.message}`);
+          }
+        }
+  
+        // Verifiziere abschließend den Tab-Zustand.
+        await this.verifyTabVisibility();
+        // Aktualisiere die Anzeige der Tab-Zahlen in der Sidebar.
+        this.updateTopicTabCounts(topicsData);
+  
+      } catch (error) {
+        this.log(`[ERROR] switchToTopic: ${error.message}`);
+        console.error(error);
+      }
+    }
+  
+    /**
+     * Verifiziert den Zustand der Tabs und loggt die finalen sichtbaren/unsichtbaren Tabs.
+     *
+     * @returns {Object} Ein Objekt mit den Arrays: visibleTabs, hiddenTabs, regularTabs.
+     */
+    async verifyTabVisibility() {
+      if (!this.hasFirefoxAPI) return {};
+  
+      try {
+        const allTabs = await browser.tabs.query({});
+        const regularTabs = allTabs.filter(tab => this.isRegularTab(tab.url));
+  
+        const visibleTabs = regularTabs.filter(tab =>
+          !tab.hidden && (!tab.groupId || tab.groupId !== this.hiddenGroupId)
+        );
+  
+        const hiddenTabs = regularTabs.filter(tab =>
+          tab.hidden || (tab.groupId && tab.groupId === this.hiddenGroupId)
+        );
+  
+        this.log(`[verify] FINAL STATE: ${visibleTabs.length} visible, ${hiddenTabs.length} hidden`);
+  
+        this.log(`[verify] Visible tabs:`);
+        visibleTabs.forEach(tab => {
+          const topic = this.tabToTopicMap.get(tab.id) || 'none';
+          const groupStatus = tab.groupId ? `in group ${tab.groupId}` : 'ungrouped';
+          this.log(`[verify]   Tab ${tab.id}: ${tab.url} (topic: ${topic}, ${groupStatus})`);
+        });
+  
+        this.log(`[verify] Hidden tabs:`);
+        hiddenTabs.forEach(tab => {
+          const topic = this.tabToTopicMap.get(tab.id) || 'none';
+          const groupStatus = tab.groupId ? `in group ${tab.groupId}` : 'ungrouped';
+          const hiddenStatus = tab.hidden ? 'hidden' : 'visible';
+          this.log(`[verify]   Tab ${tab.id}: ${tab.url} (topic: ${topic}, ${groupStatus}, ${hiddenStatus})`);
+        });
+  
+        return { visibleTabs, hiddenTabs, regularTabs };
+      } catch (error) {
+        this.log(`[ERROR] verifyTabVisibility: ${error.message}`);
+        return {};
+      }
+    }
+  
+    /**
+     * Speichert die aktuell sichtbaren Tabs für ein gegebenes Topic.
+     *
+     * @param {number} topicIndex - Der Index des Topics.
+     * @param {Array} topicsData - Array mit Topic-Daten.
+     */
+    async saveCurrentTabs(topicIndex, topicsData) {
+      if (!this.hasFirefoxAPI || topicIndex < 0 || !topicsData) return;
+  
+      try {
+        const allTabs = await browser.tabs.query({});
+        const visibleTabs = allTabs.filter(tab =>
+          this.isRegularTab(tab.url) &&
+          !tab.hidden &&
+          (!tab.groupId || tab.groupId !== this.hiddenGroupId)
+        );
+  
+        this.log(`[save] Speichere ${visibleTabs.length} Tabs in Topic ${topicIndex}.`);
+  
+        if (topicsData[topicIndex]) {
+          topicsData[topicIndex].tabs = visibleTabs.map(tab => ({
+            url: tab.url,
             title: tab.title || "Untitled",
             favIconUrl: tab.favIconUrl || ""
+          }));
+  
+          visibleTabs.forEach(tab => {
+            this.tabToTopicMap.set(tab.id, topicIndex);
           });
-        }
-        
-        // Enforce visibility
-        await this.enforceTabVisibility();
-        
-        // Notify about tab change
-        if (this.onTabsChanged) {
-          this.onTabsChanged(this.currentTopicIndex);
-        }
-      }
-    });
-    
-    // Tab removed
-    browser.tabs.onRemoved.addListener(async (tabId) => {
-      // Check if this tab was mapped
-      if (this.tabToTopicMap.has(tabId)) {
-        const topicIndex = this.tabToTopicMap.get(tabId);
-        this.log(`[event] Tab ${tabId} removed from topic ${topicIndex}`);
-        
-        // Remove from mapping
-        this.tabToTopicMap.delete(tabId);
-        
-        // Notify about tab change if it was in current topic
-        if (topicIndex === this.currentTopicIndex && this.onTabsChanged) {
-          this.onTabsChanged(this.currentTopicIndex);
-        }
-      }
-    });
-    
-    // Tab updated
-    browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-      if (changeInfo.url && this.isRegularTab(changeInfo.url)) {
-        this.log(`[event] Tab URL updated: ${tabId} -> ${changeInfo.url}`);
-        
-        // If tab doesn't have an assigned topic yet, assign it
-        if (!this.tabToTopicMap.has(tabId)) {
-          this.tabToTopicMap.set(tabId, this.currentTopicIndex);
-          this.log(`[event] Assigned updated tab ${tabId} to current topic ${this.currentTopicIndex}`);
-          
-          // Enforce visibility based on assignment
-          const tabTopic = this.currentTopicIndex;
-          if (tabTopic !== this.currentTopicIndex) {
-            // Hide tab if it's not in the current topic
-            await browser.tabs.hide([tabId]);
-            this.log(`[event] Hid updated tab ${tabId} (belongs to topic ${tabTopic})`);
-          }
-
-          // Notify about tab change
-          if (this.onTabsChanged) {
-            this.onTabsChanged(this.currentTopicIndex);
+  
+          const activeTabIndex = visibleTabs.findIndex(tab => tab.active);
+          if (activeTabIndex !== -1) {
+            topicsData[topicIndex].activeTabIndex = activeTabIndex;
           }
         }
+      } catch (error) {
+        this.log(`[ERROR] saveCurrentTabs: ${error.message}`);
       }
-    });
-  }
-  
-  // UTILITIES
-  async verifyTabVisibility() {
-    try {
-      const allTabs = await browser.tabs.query({});
-      const regularTabs = allTabs.filter(tab => this.isRegularTab(tab.url));
-      
-      const visibleTabs = regularTabs.filter(tab => !tab.hidden);
-      const hiddenTabs = regularTabs.filter(tab => tab.hidden);
-      
-      this.log(`[verify] State: ${visibleTabs.length} visible, ${hiddenTabs.length} hidden`);
-      
-      // Check for incorrect visibility
-      const wrongVisibleTabs = visibleTabs.filter(tab => 
-        this.tabToTopicMap.get(tab.id) !== this.currentTopicIndex
-      );
-      
-      const wrongHiddenTabs = hiddenTabs.filter(tab => 
-        this.tabToTopicMap.get(tab.id) === this.currentTopicIndex
-      );
-      
-      // Log visible tabs
-      visibleTabs.forEach(tab => {
-        const topic = this.tabToTopicMap.get(tab.id) || 'none';
-        const isCorrect = topic === this.currentTopicIndex;
-        this.log(`[verify] Visible: Tab ${tab.id} in topic ${topic} (${isCorrect ? 'CORRECT' : 'WRONG'})`);
-      });
-      
-      // Report errors
-      if (wrongVisibleTabs.length > 0) {
-        this.log(`[verify] ERROR: ${wrongVisibleTabs.length} tabs visible but in wrong topic!`);
-        
-        // Try to fix the issue
-        const tabIdsToHide = wrongVisibleTabs.map(tab => tab.id);
-        await browser.tabs.hide(tabIdsToHide);
-        this.log(`[verify] Attempted to hide ${tabIdsToHide.length} incorrectly visible tabs`);
-      }
-      
-      if (wrongHiddenTabs.length > 0) {
-        this.log(`[verify] ERROR: ${wrongHiddenTabs.length} tabs hidden but should be visible!`);
-        
-        // Try to fix the issue
-        const tabIdsToShow = wrongHiddenTabs.map(tab => tab.id);
-        await browser.tabs.show(tabIdsToShow);
-        this.log(`[verify] Attempted to show ${tabIdsToShow.length} incorrectly hidden tabs`);
-      }
-      
-      return {
-        correct: wrongVisibleTabs.length === 0 && wrongHiddenTabs.length === 0,
-        wrongVisibleTabs,
-        wrongHiddenTabs
-      };
-    } catch (e) {
-      this.log(`[ERROR] verifyTabVisibility failed: ${e.message}`);
-      return { correct: false };
     }
-  }
   
-  async updateTabsOverview(topicsData) {
-    if (!this.hasFirefoxAPI) return;
-    await this.validateTabAssignments();
-  }
-
-  async getTabsByType() {
-    const allTabs = await browser.tabs.query({});
-    const regularTabs = allTabs.filter(tab => this.isRegularTab(tab.url));
-    return { allTabs, regularTabs };
-  }
+    /**
+     * Überwacht Tab-Events (Erstellen, Entfernen, Aktualisieren) und synchronisiert
+     * das interne Mapping sowie die Topic-Daten.
+     *
+     * @param {Array} topicsData - Array mit Topic-Daten.
+     */
+    setupTabListeners(topicsData) {
+      if (!this.hasFirefoxAPI) return;
   
-  logTabAssignments(topicsData) {
-    // Group tabs by topic
-    const tabsByTopic = new Map();
-    
-    for (const [tabId, topicIndex] of this.tabToTopicMap.entries()) {
-      if (!tabsByTopic.has(topicIndex)) {
-        tabsByTopic.set(topicIndex, []);
-      }
-      tabsByTopic.get(topicIndex).push(tabId);
-    }
-    
-    // Log summary
-    this.log(`[tabs] Current tab assignments by topic:`);
-    for (const [topicIndex, tabIds] of tabsByTopic.entries()) {
-      const topicName = topicsData?.[topicIndex]?.name || 'Unknown';
-      this.log(`[tabs] Topic ${topicIndex} (${topicName}): ${tabIds.length} tabs - IDs: ${tabIds.join(', ')}`);
-    }
-  }
-  
-  /**
-   * Validates all tab-to-topic assignments to ensure consistency
-   * This method is required by the sidebar.js integration
-   */
-  async validateTabAssignments() {
-    if (!this.hasFirefoxAPI) return true;
-    
-    try {
-      this.log(`[validate] Validating tab assignments...`);
-      
-      // Get all current tabs
-      const allTabs = await browser.tabs.query({});
-      const regularTabs = allTabs.filter(tab => this.isRegularTab(tab.url));
-      
-      // Track changes
-      let changes = 0;
-      
-      // Ensure all regular tabs have a topic assignment
-      for (const tab of regularTabs) {
-        if (!this.tabToTopicMap.has(tab.id)) {
-          this.log(`[validate] Assigning untracked tab ${tab.id} to current topic ${this.currentTopicIndex}`);
+      browser.tabs.onCreated.addListener(tab => {
+        this.log(`[event] Neuer Tab erstellt: ${tab.id} (${tab.url})`);
+        if (this.isRegularTab(tab.url)) {
           this.tabToTopicMap.set(tab.id, this.currentTopicIndex);
-          changes++;
+          if (topicsData && topicsData[this.currentTopicIndex]) {
+            topicsData[this.currentTopicIndex].tabs = topicsData[this.currentTopicIndex].tabs || [];
+            topicsData[this.currentTopicIndex].tabs.push({
+              url: tab.url,
+              title: tab.title || "Untitled",
+              favIconUrl: tab.favIconUrl || ""
+            });
+          }
+        }
+      });
+  
+      browser.tabs.onRemoved.addListener(tabId => {
+        this.log(`[event] Tab entfernt: ${tabId}`);
+        const tabTopic = this.tabToTopicMap.get(tabId);
+        this.tabToTopicMap.delete(tabId);
+        if (topicsData && tabTopic !== undefined && topicsData[tabTopic]) {
+          this.syncTopicWithBrowser(tabTopic, topicsData);
+        }
+      });
+  
+      browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+        if (changeInfo.url && this.isRegularTab(changeInfo.url)) {
+          this.log(`[event] Tab ${tabId} URL geändert zu: ${changeInfo.url}`);
+          this.tabToTopicMap.set(tabId, this.currentTopicIndex);
+          if (topicsData && topicsData[this.currentTopicIndex]) {
+            this.syncTopicWithBrowser(this.currentTopicIndex, topicsData);
+          }
+        }
+      });
+  
+      if (this.hasTabGroupsAPI && browser.tabGroups) {
+        try {
+          browser.tabGroups.onCreated?.addListener(group => {
+            this.log(`[event] Tab-Gruppe erstellt: ${group.id} (${group.title})`);
+          });
+          browser.tabGroups.onRemoved?.addListener(groupId => {
+            this.log(`[event] Tab-Gruppe entfernt: ${groupId}`);
+            if (groupId === this.hiddenGroupId) {
+              this.recreateHiddenGroup();
+            }
+          });
+        } catch (e) {
+          this.log(`[WARNING] Fehler beim Einrichten der Tab-Gruppen-Listener: ${e.message}`);
         }
       }
-      
-      // Clean up stale tab references
-      const validTabIds = new Set(regularTabs.map(tab => tab.id));
-      for (const [tabId] of this.tabToTopicMap.entries()) {
-        if (!validTabIds.has(tabId)) {
-          this.log(`[validate] Removing stale tab ${tabId} from mapping`);
-          this.tabToTopicMap.delete(tabId);
-          changes++;
+      this.log("[init] Tab-Listener wurden eingerichtet.");
+    }
+  
+    /**
+     * Falls die versteckte Gruppe entfernt wurde, wird sie neu erstellt.
+     */
+    async recreateHiddenGroup() {
+      if (!this.hasTabGroupsAPI) return;
+      try {
+        const groupId = await browser.tabs.group({ tabIds: [] });
+        if (groupId) {
+          this.hiddenGroupId = groupId;
+          this.log(`[event] Versteckte Gruppe neu erstellt: ${this.hiddenGroupId}`);
+          try {
+            await browser.tabGroups.update(this.hiddenGroupId, {
+              title: "Hidden Tabs",
+              collapsed: true
+            });
+          } catch (e) {
+            // Ignoriere Fehler, falls update nicht möglich ist.
+          }
         }
+      } catch (e) {
+        this.log(`[ERROR] recreateHiddenGroup: ${e.message}`);
       }
-      
-      if (changes > 0) {
-        this.log(`[validate] Made ${changes} changes to tab assignments`);
-      } else {
-        this.log(`[validate] Tab assignments are valid, no changes needed`);
+    }
+  
+    /**
+     * Synchronisiert die Tabs eines bestimmten Topics mit dem aktuellen Zustand des Browsers.
+     *
+     * @param {number} topicIndex - Der Index des Topics.
+     * @param {Array} topicsData - Array mit Topic-Daten.
+     */
+    async syncTopicWithBrowser(topicIndex, topicsData) {
+      if (!this.hasFirefoxAPI || !topicsData || topicIndex < 0) return;
+      try {
+        const topicTabIds = [];
+        for (const [tabId, mappedTopic] of this.tabToTopicMap.entries()) {
+          if (mappedTopic === topicIndex) {
+            topicTabIds.push(tabId);
+          }
+        }
+        const allTabs = await browser.tabs.query({});
+        const topicTabs = [];
+        for (const tabId of topicTabIds) {
+          const tab = allTabs.find(t => t.id === tabId);
+          if (tab && this.isRegularTab(tab.url)) {
+            topicTabs.push({
+              url: tab.url,
+              title: tab.title || "Untitled",
+              favIconUrl: tab.favIconUrl || ""
+            });
+          }
+        }
+        this.log(`[sync] Topic ${topicIndex} enthält jetzt ${topicTabs.length} Tabs.`);
+        topicsData[topicIndex].tabs = topicTabs;
+      } catch (error) {
+        this.log(`[ERROR] syncTopicWithBrowser: ${error.message}`);
       }
-      
-      return true;
-    } catch (e) {
-      this.log(`[ERROR] validateTabAssignments failed: ${e.message}`);
-      return false;
+    }
+  
+    /**
+     * Aktualisiert die Anzeige der Tab-Zahlen in der Sidebar.
+     *
+     * @param {Array} topicsData - Array mit Topic-Daten.
+     */
+    updateTopicTabCounts(topicsData) {
+      if (!topicsData) return;
+      try {
+        const counts = new Map();
+        const tabsPerTopic = new Map();
+  
+        for (const [tabId, topicIndex] of this.tabToTopicMap.entries()) {
+          if (topicIndex >= 0) {
+            counts.set(topicIndex, (counts.get(topicIndex) || 0) + 1);
+            if (!tabsPerTopic.has(topicIndex)) {
+              tabsPerTopic.set(topicIndex, []);
+            }
+            tabsPerTopic.get(topicIndex).push(tabId);
+          }
+        }
+  
+        const topics = document.querySelectorAll('.topic-item');
+        topics.forEach((topicElem, index) => {
+          const badge = topicElem.querySelector('.tab-count-badge');
+          if (badge) {
+            badge.textContent = `(${counts.get(index) || 0})`;
+          }
+        });
+  
+        browser.tabs.query({}).then(allTabs => {
+          this.log(`[counts] Tab-Zähler pro Topic:`);
+          for (let i = 0; i < topicsData.length; i++) {
+            const count = counts.get(i) || 0;
+            const tabIds = tabsPerTopic.get(i) || [];
+            this.log(`[counts] Topic ${i} (${topicsData[i].name}): ${count} Tabs - IDs: ${tabIds.join(", ")}`);
+          }
+        }).catch(e => {
+          this.log(`[ERROR] updateTopicTabCounts: ${e.message}`);
+        });
+      } catch (error) {
+        this.log(`[ERROR] updateTopicTabCounts: ${error.message}`);
+      }
+    }
+  
+    /**
+     * Schließt alle Tabs, die zu einem bestimmten Topic gehören.
+     *
+     * @param {number} topicIndex - Der Index des Topics.
+     */
+    async closeTabsForTopic(topicIndex) {
+      if (!this.hasFirefoxAPI) return;
+      try {
+        const tabsToClose = [];
+        for (const [tabId, topic] of this.tabToTopicMap.entries()) {
+          if (topic === topicIndex) {
+            tabsToClose.push(tabId);
+          }
+        }
+        this.log(`[close] Schließe ${tabsToClose.length} Tabs für Topic ${topicIndex}.`);
+        if (tabsToClose.length > 0) {
+          await browser.tabs.remove(tabsToClose);
+        }
+      } catch (error) {
+        this.log(`[ERROR] closeTabsForTopic: ${error.message}`);
+      }
+    }
+  
+    /**
+     * Hilfsmethode zum Loggen.
+     */
+    log(...args) {
+      console.log("[TabManager]", ...args);
     }
   }
-}
+  
