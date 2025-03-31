@@ -286,3 +286,20 @@ input[type="text"] {
 #bookmark-links-section {
   margin-top: 10px;
 }
+
+.header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.icon-button {
+    background: none;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.icon-button:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}

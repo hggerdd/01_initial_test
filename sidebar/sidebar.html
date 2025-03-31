@@ -1,114 +1,122 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <link rel="stylesheet" href="sidebar.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="sidebar.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 </head>
 <body>
-  <div id="sidebar-container">
-    <header>
-      <h2>Topics</h2>
-      <button id="add-topic-btn">
-        <i class="fas fa-plus"></i> Add Topic
-      </button>
-    </header>
-    
-    <div id="new-topic-form" style="display: none;">
-      <input type="text" id="new-topic-input" placeholder="Enter new topic...">
-      <div class="form-buttons">
-        <button id="save-new-topic-btn">Save</button>
-        <button id="cancel-new-topic-btn">Cancel</button>
-      </div>
-    </div>
-    
-    <div id="edit-topic-form" style="display: none;">
-      <input type="text" id="edit-topic-input" placeholder="Edit topic...">
-      <div class="form-buttons">
-        <button id="save-edit-topic-btn">Save</button>
-        <button id="cancel-edit-topic-btn">Cancel</button>
-      </div>
-      <input type="hidden" id="edit-topic-id">
-    </div>
-    
-    <ul id="topics-list">
-      <!-- Topics will be added here dynamically -->
-    </ul>
-    <!-- New container for list of tabs per topic -->
-    <div id="tabs-list-section">
-      <!-- Tabs of the selected topic will be rendered here dynamically -->
-    </div>
-    
-    <div id="bookmarks-section">
-      <!-- Bookmarks Categories -->
-      <div class="bookmarks-header">
-        <span>Categories</span>
-        <button id="add-category-btn" class="small-btn">
-          <i class="fas fa-plus"></i>
-        </button>
-      </div>
-      
-      <ul id="bookmark-categories">
-        <!-- Bookmark categories will be added here dynamically -->
-      </ul>
-      
-      <!-- Add Category Form -->
-      <div id="add-category-form" style="display: none;">
-        <input type="text" id="new-category-input" placeholder="Category name...">
-        <div class="form-buttons">
-          <button id="save-category-btn">Save</button>
-          <button id="cancel-category-btn">Cancel</button>
-        </div>
-      </div>
-      
-      <!-- Edit Category Form -->
-      <div id="edit-category-form" style="display: none;">
-        <input type="text" id="edit-category-input" placeholder="Edit category...">
-        <div class="form-buttons">
-          <button id="save-edit-category-btn">Save</button>
-          <button id="cancel-edit-category-btn">Cancel</button>
-        </div>
-        <input type="hidden" id="edit-category-id">
-      </div>
-      
-      <!-- Links for selected category -->
-      <div id="bookmark-links-section" style="display: none;">
-        <div class="bookmarks-header">
-          <span id="selected-category-name">Links</span>
-          <button id="add-link-btn" class="small-btn">
-            <i class="fas fa-plus"></i>
-          </button>
+    <div id="topics-section" class="section">
+        <div class="section-header">
+            <h2>Topics</h2>
+            <div class="header-actions">
+                <button id="export-data-btn" title="Export Data" class="icon-button">
+                    <i class="fas fa-download"></i>
+                </button>
+                <button id="import-data-btn" title="Import Data" class="icon-button">
+                    <i class="fas fa-upload"></i>
+                </button>
+                <button id="add-topic-btn" title="Add Topic" class="icon-button">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
         </div>
         
-        <ul id="bookmark-links">
-          <!-- Bookmark links will be added here dynamically -->
+        <div id="new-topic-form" style="display: none;">
+            <input type="text" id="new-topic-input" placeholder="Enter new topic...">
+            <div class="form-buttons">
+                <button id="save-new-topic-btn">Save</button>
+                <button id="cancel-new-topic-btn">Cancel</button>
+            </div>
+        </div>
+        
+        <div id="edit-topic-form" style="display: none;">
+            <input type="text" id="edit-topic-input" placeholder="Edit topic...">
+            <div class="form-buttons">
+                <button id="save-edit-topic-btn">Save</button>
+                <button id="cancel-edit-topic-btn">Cancel</button>
+            </div>
+            <input type="hidden" id="edit-topic-id">
+        </div>
+        
+        <ul id="topics-list">
+            <!-- Topics will be added here dynamically -->
         </ul>
-        
-        <!-- Add Link Form -->
-        <div id="add-link-form" style="display: none;">
-          <input type="text" id="new-link-title-input" placeholder="Link title...">
-          <input type="text" id="new-link-url-input" placeholder="URL...">
-          <div class="form-buttons">
-            <button id="use-current-url-btn">Use Current Tab</button>
-            <button id="save-link-btn">Save</button>
-            <button id="cancel-link-btn">Cancel</button>
-          </div>
+        <!-- New container for list of tabs per topic -->
+        <div id="tabs-list-section">
+            <!-- Tabs of the selected topic will be rendered here dynamically -->
         </div>
         
-        <!-- Edit Link Form -->
-        <div id="edit-link-form" style="display: none;">
-          <input type="text" id="edit-link-title-input" placeholder="Edit link title...">
-          <input type="text" id="edit-link-url-input" placeholder="Edit URL...">
-          <div class="form-buttons">
-            <button id="use-current-url-edit-btn">Use Current Tab</button>
-            <button id="save-edit-link-btn">Save</button>
-            <button id="cancel-edit-link-btn">Cancel</button>
-          </div>
-          <input type="hidden" id="edit-link-id">
+        <div id="bookmarks-section">
+            <!-- Bookmarks Categories -->
+            <div class="bookmarks-header">
+                <span>Categories</span>
+                <button id="add-category-btn" class="small-btn">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
+            
+            <ul id="bookmark-categories">
+                <!-- Bookmark categories will be added here dynamically -->
+            </ul>
+            
+            <!-- Add Category Form -->
+            <div id="add-category-form" style="display: none;">
+                <input type="text" id="new-category-input" placeholder="Category name...">
+                <div class="form-buttons">
+                    <button id="save-category-btn">Save</button>
+                    <button id="cancel-category-btn">Cancel</button>
+                </div>
+            </div>
+            
+            <!-- Edit Category Form -->
+            <div id="edit-category-form" style="display: none;">
+                <input type="text" id="edit-category-input" placeholder="Edit category...">
+                <div class="form-buttons">
+                    <button id="save-edit-category-btn">Save</button>
+                    <button id="cancel-edit-category-btn">Cancel</button>
+                </div>
+                <input type="hidden" id="edit-category-id">
+            </div>
+            
+            <!-- Links for selected category -->
+            <div id="bookmark-links-section" style="display: none;">
+                <div class="bookmarks-header">
+                    <span id="selected-category-name">Links</span>
+                    <button id="add-link-btn" class="small-btn">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                
+                <ul id="bookmark-links">
+                    <!-- Bookmark links will be added here dynamically -->
+                </ul>
+                
+                <!-- Add Link Form -->
+                <div id="add-link-form" style="display: none;">
+                    <input type="text" id="new-link-title-input" placeholder="Link title...">
+                    <input type="text" id="new-link-url-input" placeholder="URL...">
+                    <div class="form-buttons">
+                        <button id="use-current-url-btn">Use Current Tab</button>
+                        <button id="save-link-btn">Save</button>
+                        <button id="cancel-link-btn">Cancel</button>
+                    </div>
+                </div>
+                
+                <!-- Edit Link Form -->
+                <div id="edit-link-form" style="display: none;">
+                    <input type="text" id="edit-link-title-input" placeholder="Edit link title...">
+                    <input type="text" id="edit-link-url-input" placeholder="Edit URL...">
+                    <div class="form-buttons">
+                        <button id="use-current-url-edit-btn">Use Current Tab</button>
+                        <button id="save-edit-link-btn">Save</button>
+                        <button id="cancel-edit-link-btn">Cancel</button>
+                    </div>
+                    <input type="hidden" id="edit-link-id">
+                </div>
+            </div>
         </div>
-      </div>
     </div>
-  </div>
-  <script type="module" src="js/sidebar.js"></script>
+    <script type="module" src="js/sidebar.js"></script>
 </body>
 </html>

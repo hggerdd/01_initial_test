@@ -2,6 +2,7 @@ import { TopicManager } from './modules/topics.js';
 import { CategoryManager } from './modules/categories.js';
 import { BookmarkManager } from './modules/bookmarks.js';
 import { TabManager } from './modules/tab_manager.js';
+import { downloadObjectAsJson, uploadJsonFile } from './modules/utils.js';
 
 const hasFirefoxAPI = typeof browser !== 'undefined' && browser.storage;
 let topicsData = [];
@@ -403,6 +404,49 @@ document.addEventListener("DOMContentLoaded", async function() {
           inputs.forEach(input => input.value = '');
         }
       });
+    });
+
+    // Add export/import handlers
+    document.getElementById("export-data-btn").addEventListener("click", () => {
+      const exportData = {
+        topicsData,
+        currentTopicIndex,
+        version: "1.0"
+      };
+      downloadObjectAsJson(exportData, `simple-topics-backup-${new Date().toISOString().split('T')[0]}.json`);
+    });
+
+    document.getElementById("import-data-btn").addEventListener("click", async () => {
+      try {
+        const importedData = await uploadJsonFile();
+        
+        if (!importedData.topicsData || !Array.isArray(importedData.topicsData)) {
+          throw new Error('Invalid data format');
+        }
+
+        // Store the imported data
+        topicsData = importedData.topicsData;
+        currentTopicIndex = typeof importedData.currentTopicIndex === 'number' ? 
+                          importedData.currentTopicIndex : 0;
+
+        // Save to storage
+        await topicManager.saveTopicsData(topicsData, currentTopicIndex);
+        
+        // Switch to the current topic and update UI
+        if (hasFirefoxAPI) {
+          await tabManager.switchToTopic(currentTopicIndex, topicsData);
+        }
+        
+        // Re-render everything
+        topicManager.renderTopics(topicsData, currentTopicIndex);
+        categoryManager.renderCategories(topicsData, currentTopicIndex);
+        
+        // Show success message
+        alert('Data imported successfully!');
+      } catch (error) {
+        console.error('Import error:', error);
+        alert('Error importing data: ' + error.message);
+      }
     });
   } catch (error) {
     console.error('Initialization error:', error);
