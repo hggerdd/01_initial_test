@@ -3,41 +3,21 @@ import { escapeHTML } from './utils.js';
 export class BookmarkManager {
   constructor(hasFirefoxAPI) {
     this.hasFirefoxAPI = hasFirefoxAPI;
-    this.currentState = {
-      topicsData: null,
-      currentTopicIndex: -1,
-      currentCategoryIndex: -1
-    };
     this.callbacks = {
       onBookmarkEdit: null,
-      onBookmarkDelete: null,
-      onStateChange: null
+      onBookmarkDelete: null
     };
-  }
-
-  setState(newState) {
-    this.currentState = { ...this.currentState, ...newState };
-    // Notify state changes
-    if (this.callbacks.onStateChange) {
-      this.callbacks.onStateChange(this.currentState);
-    }
   }
 
   setCallbacks(callbacks) {
     this.callbacks = { ...this.callbacks, ...callbacks };
   }
 
-  renderBookmarks(category, categoryIndex) {
+  renderBookmarks(category) {
     const linksList = document.getElementById("bookmark-links");
-    const linksSection = document.getElementById("bookmark-links-section");
-    if (!linksList || !linksSection) return;
+    if (!linksList) return;
 
-    // Update current category index
-    this.setState({ currentCategoryIndex: categoryIndex });
-
-    linksSection.style.display = "block";
-    
-    if (!category?.bookmarks?.length) {
+    if (!category.bookmarks || category.bookmarks.length === 0) {
       linksList.innerHTML = "<li class='empty-list'>No bookmarks yet.</li>";
       return;
     }
@@ -181,9 +161,7 @@ export class BookmarkManager {
       url = 'https://' + url;
     }
 
-    const bookmark = { title, url };
-    onBookmarkAdd(bookmark, this.currentState.currentCategoryIndex);
-    
+    onBookmarkAdd({ title, url });
     form.style.display = 'none';
     titleInput.value = '';
     urlInput.value = '';

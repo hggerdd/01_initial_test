@@ -41,6 +41,13 @@ export class TopicManager {
 
     return topicsData.slice(0, 100).map((topicData, index) => {
       const tabCount = this.calculateTabCount(topicData);
+      // Build a comma-separated list of the first 8 characters of each tab's title (or URL)
+      const extra = topicData.tabs && topicData.tabs.length > 0
+        ? topicData.tabs.map(tab => {
+            let text = tab.title ? tab.title : tab.url;
+            return escapeHTML(text.substring(0, 8));
+          }).join(', ')
+        : "";
       const isSelected = index === currentTopicIndex;
       
       return `
@@ -49,6 +56,7 @@ export class TopicManager {
             ${escapeHTML(topicData.name)} 
             <span class="tab-count-badge">(${tabCount})</span>
           </span>
+          <small class="topic-extra">${extra}</small>
           <div class="topic-actions">
             <button class="edit-btn" title="Edit Topic">
               <i class="fas fa-edit"></i>
@@ -122,69 +130,17 @@ export class TopicManager {
 
   async addNewTopic(name) {
     if (!name) return false;
-    
-    // Create new topic with no initial tabs
-    // We'll create the Google tab only after properly switching to this topic
+    // New topic always starts with a single "google.de" tab.
     const newTopic = {
       name: name.trim(),
-      tabs: [], // Start with empty tabs array
+      tabs: [{
+        url: "https://www.google.de",
+        title: "Google",
+        favIconUrl: ""
+      }],
       categories: []
     };
-    
     return newTopic;
-  }
-
-  async handleNewTopicCreation(topicData, currentIndex, tabManager) {
-    if (!this.hasFirefoxAPI || !tabManager) return false;
-
-    try {
-      // First ensure all current tabs are properly mapped to their current topic
-      await tabManager.validateTabAssignments();
-
-      // Add new topic to array - this will be at index length
-      const newTopicIndex = currentIndex + 1;
-
-      // Create a new tab for the topic AFTER switching
-      const switchSuccess = await tabManager.switchToTopic(newTopicIndex, topicData);
-      
-      if (switchSuccess) {
-        // Now create the new Google tab
-        const newTab = await browser.tabs.create({
-          url: "https://www.google.de",
-          active: true
-        });
-
-        // Explicitly assign new tab to new topic using TabManager's method
-        tabManager.tabToTopicMap.set(newTab.id, newTopicIndex);
-        
-        // Update tabs array for new topic
-        topicData[newTopicIndex].tabs = [{
-          url: "https://www.google.de",
-          title: "Google",
-          favIconUrl: ""
-        }];
-
-        // Hide any other visible tabs that might have appeared
-        const allTabs = await browser.tabs.query({});
-        const tabsToHide = allTabs.filter(tab => 
-          tab.id !== newTab.id && 
-          tabManager.isRegularTab(tab.url)
-        );
-
-        if (tabsToHide.length > 0) {
-          // Use tab hide API directly since we're in an atomic operation
-          await browser.tabs.hide(tabsToHide.map(t => t.id));
-        }
-
-        // Final validation
-        await tabManager.verifyTabVisibility();
-      }
-
-      return switchSuccess;
-    } catch (error) {
-      console.error('[TopicManager] Error in handleNewTopicCreation:', error);
-      return false;
-    }
   }
 
   setupTopicFormListeners(elements, onTopicAdd) {
@@ -272,4 +228,6 @@ export class TopicManager {
       });
     }
   }
+
+  // ... other topic management methods ...
 }

@@ -21,18 +21,10 @@ document.addEventListener("DOMContentLoaded", async function() {
       throw new Error('TabManager missing required methods');
     }
 
-    // Initialize tab manager first with empty topics data
-    await tabManager.initialize(topicsData);
+    // Initialize tab manager first
+    await tabManager.initialize();
     
-    // Set up tab change handler
-    tabManager.onTabsChanged = (changedTopicIndex) => {
-      if (changedTopicIndex === currentTopicIndex) {
-        // Re-render topics to update tab count
-        topicManager.renderTopics(topicsData, currentTopicIndex);
-      }
-    };
-
-    // Initialize managers with topics list element
+    // Initialize managers
     const elements = {
       addTopicBtn: document.getElementById("add-topic-btn"),
       newTopicForm: document.getElementById("new-topic-form"),
@@ -101,9 +93,7 @@ document.addEventListener("DOMContentLoaded", async function() {
     function loadData() {
       if (hasFirefoxAPI) {
         browser.storage.local.get(["topicsData", "currentTopicIndex"])
-          .then(async (result) => {
-            await initializeData(result);
-          })
+          .then(initializeData)
           .catch(handleError);
       } else {
         try {
@@ -134,7 +124,7 @@ document.addEventListener("DOMContentLoaded", async function() {
         currentTopicIndex = 0;
         // If Firefox API is available, query current tabs and attach them.
         if (hasFirefoxAPI) {
-          browser.tabs.query({}).then(async allTabs => {
+          browser.tabs.query({}).then(allTabs => {
             const regularTabs = allTabs.filter(tab =>
               tab.url &&
               !tab.url.startsWith("about:") &&
@@ -148,12 +138,12 @@ document.addEventListener("DOMContentLoaded", async function() {
               title: tab.title || "Untitled",
               favIconUrl: tab.favIconUrl || ""
             }));
-            await topicManager.saveTopicsData(topicsData, currentTopicIndex);
+            topicManager.saveTopicsData(topicsData, currentTopicIndex);
             // Re-render topics and re-attach event listeners.
             topicManager.renderTopics(topicsData, currentTopicIndex);
             topicManager.attachEventListeners(topicsData);
-            // Switch to default topic
-            await tabManager.switchToTopic(currentTopicIndex, topicsData);
+            // Switch to default topic: only its tabs will be shown.
+            tabManager.switchToTopic(currentTopicIndex, topicsData);
           });
         } else {
           topicsData[0].tabs = [];
@@ -164,7 +154,6 @@ document.addEventListener("DOMContentLoaded", async function() {
         }
       }
 
-      // Always render topics, even if topics already exist
       topicManager.renderTopics(topicsData, currentTopicIndex);
       topicManager.attachEventListeners(topicsData);
 
@@ -229,7 +218,7 @@ document.addEventListener("DOMContentLoaded", async function() {
 
     // Setup minimal event listeners, move specific handlers to their respective managers
     function setupEventListeners() {
-      tabManager.setupTabListeners(topicsData, () => {
+      tabManager.setupTabListeners(currentTopicIndex, topicsData, () => {
         topicManager.renderTopics(topicsData, currentTopicIndex);
         topicManager.saveTopicsData(topicsData, currentTopicIndex);
       });
@@ -238,8 +227,16 @@ document.addEventListener("DOMContentLoaded", async function() {
     }
 
     // Update new topic addition callback to switch to the new topic only once:
-    topicManager.setupTopicFormListeners(elements, async (topic) => {
-      await handleAddTopic(topic);
+    topicManager.setupTopicFormListeners(elements, (topic) => {
+      topicsData.push(topic);
+      currentTopicIndex = topicsData.length - 1;
+      topicManager.saveTopicsData(topicsData, currentTopicIndex);
+      if (hasFirefoxAPI) {
+        // Switch to the new topic to show only its tab (i.e. the google.de tab)
+        tabManager.switchToTopic(currentTopicIndex, topicsData);
+      }
+      // Update the topics list after adding without calling initializeData again.
+      topicManager.renderTopics(topicsData, currentTopicIndex);
     });
 
     categoryManager.setupCategoryFormListeners(elements, (name) => {
@@ -407,33 +404,6 @@ document.addEventListener("DOMContentLoaded", async function() {
         }
       });
     });
-
-    /**
-     * Handle adding a new topic with proper tab management
-     */
-    async function handleAddTopic(topic) {
-      const currentIndex = topicsData.length;
-      topicsData.push(topic);
-
-      // Use the new handle creation method that properly manages tabs
-      const success = await topicManager.handleNewTopicCreation(topicsData, currentIndex - 1, tabManager);
-      
-      if (success) {
-        // Save the state after successful creation
-        await topicManager.saveTopicsData(topicsData, currentIndex);
-        await renderUI();
-      } else {
-        // If creation failed, roll back
-        topicsData.pop();
-        console.error('Failed to create new topic');
-      }
-    }
-
-    async function renderUI() {
-      // Re-render topics and categories
-      topicManager.renderTopics(topicsData, currentTopicIndex);
-      categoryManager.renderCategories(topicsData, currentTopicIndex);
-    }
   } catch (error) {
     console.error('Initialization error:', error);
   }
