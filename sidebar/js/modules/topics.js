@@ -247,12 +247,15 @@ export class TopicManager {
   openAddTopicModal() {
     if (this.hasFirefoxAPI) {
       const modalUrl = browser.runtime.getURL('modals/add-topic.html');
+      // Get screen dimensions
       browser.windows.create({
         url: modalUrl,
         type: 'popup',
-        width: 400,
-        height: 280,  // Increased height for category options
-        allowScriptsToClose: true
+        width: 400,  // Increased from default
+        height: 300,  // Increased height to fit all content
+        allowScriptsToClose: true,
+        left: screen.width / 2 - 200,  // Center horizontally (width/2)
+        top: screen.height / 2 - 150   // Center vertically (height/2)
       }).catch(err => {
         console.error('Error opening modal:', err);
         alert('Failed to open add topic dialog');
