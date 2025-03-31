@@ -85,6 +85,46 @@
     .secondary-btn:hover {
       background-color: #555;
     }
+
+    .category-options {
+      margin-top: 16px;
+      margin-bottom: 16px;
+    }
+
+    .checkbox-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .checkbox-container input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+
+    .checkbox-container label {
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .category-set-select {
+      width: 100%;
+      padding: 8px;
+      background-color: #333;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: white;
+      font-size: 14px;
+      margin-top: 8px;
+      display: none;
+    }
+
+    .category-set-select option {
+      background-color: #333;
+      color: white;
+    }
   </style>
 </head>
 <body>
@@ -94,6 +134,16 @@
   <div class="modal-form">
     <label for="topic-input">Topic Name</label>
     <input type="text" id="topic-input" placeholder="Enter new topic name..." autofocus>
+    
+    <div class="category-options">
+      <div class="checkbox-container">
+        <input type="checkbox" id="add-standard-categories" name="add-standard-categories">
+        <label for="add-standard-categories">Add standard categories</label>
+      </div>
+      <select id="category-set-select" class="category-set-select">
+        <option value="standard">Standard Set (Files, Notes, Links)</option>
+      </select>
+    </div>
   </div>
   <div class="modal-footer">
     <button id="save-btn" class="primary-btn">OK</button>

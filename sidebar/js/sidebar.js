@@ -472,20 +472,23 @@ document.addEventListener("DOMContentLoaded", async function() {
      * Handle adding a new topic with proper tab management
      */
     async function handleAddTopic(topic) {
-      const currentIndex = topicsData.length;
-      topicsData.push(topic);
+      try {
+        const currentIndex = topicsData.length;
+        topicsData.push(topic);
 
-      // Use the new handle creation method that properly manages tabs
-      const success = await topicManager.handleNewTopicCreation(topicsData, currentIndex - 1, tabManager);
-      
-      if (success) {
+        // Switch to new topic
+        await selectTopic(currentIndex);
+        
         // Save the state after successful creation
         await topicManager.saveTopicsData(topicsData, currentIndex);
         await renderUI();
-      } else {
+
+        return true;
+      } catch (error) {
+        console.error('Failed to create new topic:', error);
         // If creation failed, roll back
         topicsData.pop();
-        console.error('Failed to create new topic');
+        return false;
       }
     }
 

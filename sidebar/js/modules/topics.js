@@ -213,96 +213,45 @@ export class TopicManager {
     });
   }
 
-  async addNewTopic(name) {
+  async addNewTopic(name, categorySet = null) {
     if (!name) return false;
     
     // Create new topic with no initial tabs
-    // We'll create the Google tab only after properly switching to this topic
     const newTopic = {
       name: name.trim(),
       tabs: [], // Start with empty tabs array
       categories: []
     };
+
+    // Add standard categories if a category set was selected
+    if (categorySet && categorySet.list_of_categories) {
+      newTopic.categories = categorySet.list_of_categories.map(name => ({
+        name,
+        bookmarks: []
+      }));
+    }
     
     return newTopic;
   }
 
-  async handleNewTopicCreation(topicData, currentIndex, tabManager) {
-    if (!this.hasFirefoxAPI || !tabManager) return false;
-
-    try {
-      // First ensure all current tabs are properly mapped to their current topic
-      await tabManager.validateTabAssignments();
-
-      // Add new topic to array - this will be at index length
-      const newTopicIndex = currentIndex + 1;
-
-      // Create a new tab for the topic AFTER switching
-      const switchSuccess = await tabManager.switchToTopic(newTopicIndex, topicData);
-      
-      if (switchSuccess) {
-        // Now create the new Google tab
-        const newTab = await browser.tabs.create({
-          url: "https://www.google.de",
-          active: true
-        });
-
-        // Explicitly assign new tab to new topic using TabManager's method
-        tabManager.tabToTopicMap.set(newTab.id, newTopicIndex);
-        
-        // Update tabs array for new topic
-        topicData[newTopicIndex].tabs = [{
-          url: "https://www.google.de",
-          title: "Google",
-          favIconUrl: ""
-        }];
-
-        // Hide any other visible tabs that might have appeared
-        const allTabs = await browser.tabs.query({});
-        const tabsToHide = allTabs.filter(tab => 
-          tab.id !== newTab.id && 
-          tabManager.isRegularTab(tab.url)
-        );
-
-        if (tabsToHide.length > 0) {
-          // Use tab hide API directly since we're in an atomic operation
-          await browser.tabs.hide(tabsToHide.map(t => t.id));
-        }
-
-        // Final validation
-        await tabManager.verifyTabVisibility();
-      }
-
-      return switchSuccess;
-    } catch (error) {
-      console.error('[TopicManager] Error in handleNewTopicCreation:', error);
-      return false;
-    }
-  }
-
   setupTopicFormListeners(elements, onTopicAdd) {
-    // Store callback for modal responses
     this.onTopicAdd = onTopicAdd;
 
-    // Add topic button opens the modal
     if (elements.addTopicBtn) {
       elements.addTopicBtn.addEventListener('click', () => {
-        if (this.hasFirefoxAPI) {
-          this.openAddTopicModal();
-        }
+        this.openAddTopicModal();
       });
     }
   }
 
   openAddTopicModal() {
     if (this.hasFirefoxAPI) {
-      // Get the extension URL for the modal
       const modalUrl = browser.runtime.getURL('modals/add-topic.html');
       browser.windows.create({
         url: modalUrl,
         type: 'popup',
         width: 400,
-        height: 200,
+        height: 280,  // Increased height for category options
         allowScriptsToClose: true
       }).catch(err => {
         console.error('Error opening modal:', err);
@@ -314,8 +263,7 @@ export class TopicManager {
   async handleModalResponse(message) {
     try {
       if (message.success && message.topicName) {
-        console.log('Received modal response:', message);
-        const topic = await this.addNewTopic(message.topicName);
+        const topic = await this.addNewTopic(message.topicName, message.categorySet);
         if (topic && this.onTopicAdd) {
           await this.onTopicAdd(topic);
         }
