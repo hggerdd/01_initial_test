@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html {
+      background-color: #222;
+    }
+    body {
+      background-color: #222;
+      color: white;
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      min-width: 400px;
+      max-height: 600px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      font-size: 16px;
+      color: #fff;
+    }
+
+    .sets-container {
+      flex: 1;
+      overflow-y: auto;
+      margin-bottom: 16px;
+    }
+
+    .set-item {
+      background-color: #333;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      padding: 12px;
+    }
+
+    .set-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .set-title {
+      font-weight: bold;
+      color: #4CAF50;
+    }
+
+    .set-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .categories-list {
+      list-style: none;
+      padding: 0;
+      margin: 8px 0;
+    }
+
+    .category-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 8px;
+      background-color: #444;
+      margin: 4px 0;
+      border-radius: 3px;
+    }
+
+    .category-text {
+      flex: 1;
+    }
+
+    .category-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    button {
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background-color 0.2s;
+    }
+
+    .primary-btn {
+      background-color: #4CAF50;
+      color: white;
+      padding: 8px 16px;
+    }
+
+    .primary-btn:hover {
+      background-color: #45a049;
+    }
+
+    .secondary-btn {
+      background-color: #2196F3;
+      color: white;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+
+    .secondary-btn:hover {
+      background-color: #1976D2;
+    }
+
+    .danger-btn {
+      background-color: #943030;
+      color: white;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+
+    .danger-btn:hover {
+      background-color: #7a2828;
+    }
+
+    .icon-btn {
+      background: none;
+      color: #aaa;
+      padding: 4px;
+    }
+
+    .icon-btn:hover {
+      color: white;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: space-between;
+      margin-top: auto;
+      padding-top: 16px;
+      border-top: 1px solid #444;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      background-color: #444;
+      border: 1px solid #555;
+      border-radius: 4px;
+      color: white;
+      font-size: 13px;
+      box-sizing: border-box;
+    }
+
+    input[type="text"]:focus {
+      border-color: #4CAF50;
+      outline: none;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .edit-form {
+      margin: 8px 0;
+      display: flex;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="modal-header">
+    <h3>Manage Category Sets</h3>
+  </div>
+
+  <div class="sets-container">
+    <!-- Sets will be added here dynamically -->
+  </div>
+
+  <div id="add-set-form" class="edit-form hidden">
+    <input type="text" id="new-set-input" placeholder="Enter set name...">
+    <button id="save-new-set-btn" class="secondary-btn">Add</button>
+    <button id="cancel-new-set-btn" class="danger-btn">Cancel</button>
+  </div>
+
+  <div class="modal-footer">
+    <button id="add-set-btn" class="primary-btn">
+      <i class="fas fa-plus"></i> Add New Set
+    </button>
+    <button id="close-btn" class="secondary-btn">Close</button>
+  </div>
+
+  <script src="category-sets-modal.js"></script>
+</body>
+</html>

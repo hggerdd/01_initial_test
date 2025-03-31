@@ -117,13 +117,46 @@
       border-radius: 4px;
       color: white;
       font-size: 14px;
-      margin-top: 8px;
+      margin-bottom: 8px;
       display: none;
+    }
+
+    .category-set-select.visible {
+      display: block;
     }
 
     .category-set-select option {
       background-color: #333;
       color: white;
+      padding: 4px;
+    }
+
+    .category-set-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .manage-sets-btn {
+      background-color: #2196F3;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .manage-sets-btn i {
+      font-size: 12px;
+    }
+
+    .manage-sets-btn:hover {
+      background-color: #1976D2;
     }
   </style>
 </head>
@@ -140,9 +173,14 @@
         <input type="checkbox" id="add-standard-categories" name="add-standard-categories">
         <label for="add-standard-categories">Add standard categories</label>
       </div>
-      <select id="category-set-select" class="category-set-select">
-        <option value="standard">Standard Set (Files, Notes, Links)</option>
-      </select>
+      <div class="category-set-controls">
+        <select id="category-set-select" class="category-set-select">
+          <option value="standard">Standard Set (Files, Notes, Links)</option>
+        </select>
+        <button id="manage-sets-btn" class="manage-sets-btn" title="Manage Category Sets">
+          <i class="fas fa-cog"></i> Manage Sets
+        </button>
+      </div>
     </div>
   </div>
   <div class="modal-footer">

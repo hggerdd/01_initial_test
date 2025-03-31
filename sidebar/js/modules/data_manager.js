@@ -13,18 +13,25 @@ export class DataManager {
 
   async exportData(topicsData, currentTopicIndex) {
     try {
-      // First, get complete data from storage
+      // Get complete data from storage
       let completeData;
       if (this.hasFirefoxAPI) {
-        const result = await browser.storage.local.get(['topicsData', 'currentTopicIndex']);
+        const result = await browser.storage.local.get(['topicsData', 'currentTopicIndex', 'categorySets']);
         completeData = {
           topicsData: result.topicsData || [],
-          currentTopicIndex: result.currentTopicIndex || -1
+          currentTopicIndex: result.currentTopicIndex || -1,
+          categorySets: result.categorySets || {
+            standard: {
+              name: "Standard Set",
+              categories: ["Files", "Notes", "Links"]
+            }
+          }
         };
       } else {
         completeData = {
           topicsData: JSON.parse(localStorage.getItem('topicsData') || '[]'),
-          currentTopicIndex: parseInt(localStorage.getItem('currentTopicIndex') || '-1')
+          currentTopicIndex: parseInt(localStorage.getItem('currentTopicIndex') || '-1'),
+          categorySets: JSON.parse(localStorage.getItem('categorySets') || '{}')
         };
       }
 
@@ -38,7 +45,8 @@ export class DataManager {
             bookmarks: category.bookmarks || []
           })) || []
         })),
-        currentTopicIndex: completeData.currentTopicIndex
+        currentTopicIndex: completeData.currentTopicIndex,
+        categorySets: completeData.categorySets
       };
 
       // Create and trigger download
@@ -96,8 +104,25 @@ export class DataManager {
                 })) : []
               })),
               currentTopicIndex: typeof data.currentTopicIndex === 'number' ? 
-                data.currentTopicIndex : -1
+                data.currentTopicIndex : -1,
+              categorySets: data.categorySets || {
+                standard: {
+                  name: "Standard Set",
+                  categories: ["Files", "Notes", "Links"]
+                }
+              }
             };
+
+            // Save category sets separately
+            if (this.hasFirefoxAPI) {
+              await browser.storage.local.set({ 
+                categorySets: validatedData.categorySets 
+              });
+            } else {
+              localStorage.setItem('categorySets', 
+                JSON.stringify(validatedData.categorySets)
+              );
+            }
 
             // Notify callback with validated data
             await this.callbacks.onDataImported?.(validatedData);

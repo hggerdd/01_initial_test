@@ -1,74 +1,100 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const input = document.getElementById('topic-input');
   const saveBtn = document.getElementById('save-btn');
   const cancelBtn = document.getElementById('cancel-btn');
   const addStandardCategoriesCheckbox = document.getElementById('add-standard-categories');
   const categorySetSelect = document.getElementById('category-set-select');
+  const manageSetBtn = document.getElementById('manage-sets-btn');
 
-  // Standard category sets
-  const categorySets = {
-    standard: {
-      categorie_set_name: "standard",
-      list_of_categories: ["Files", "Notes", "Links"]
-    }
-  };
+  let categorySets = {};
 
-  // Listen for error responses
-  browser.runtime.onMessage.addListener((message) => {
-    if (message.type === 'modalError') {
-      console.error('Error creating topic:', message.error);
-      alert('Failed to create topic: ' + message.error);
+  // Load category sets from storage
+  async function loadCategorySets() {
+    try {
+      const result = await browser.storage.local.get('categorySets');
+      categorySets = result.categorySets || {
+        standard: {
+          name: "Standard Set",
+          categories: ["Files", "Notes", "Links"]
+        }
+      };
+      updateCategorySetSelect();
+    } catch (err) {
+      console.error('Error loading category sets:', err);
     }
-  });
+  }
+
+  // Update category set dropdown
+  function updateCategorySetSelect() {
+    categorySetSelect.innerHTML = Object.entries(categorySets)
+      .map(([id, set]) => `<option value="${id}">${set.name} (${set.categories.join(', ')})</option>`)
+      .join('');
+  }
 
   // Toggle category set select visibility
   addStandardCategoriesCheckbox.addEventListener('change', (e) => {
     categorySetSelect.style.display = e.target.checked ? 'block' : 'none';
   });
 
+  // Open category sets management modal
+  manageSetBtn.addEventListener('click', async () => {
+    const modalUrl = browser.runtime.getURL('modals/category-sets-modal.html');
+    const modal = await browser.windows.create({
+      url: modalUrl,
+      type: 'popup',
+      width: 500,
+      height: 600,
+      allowScriptsToClose: true,
+      left: screen.width / 2 - 250,
+      top: screen.height / 2 - 300
+    });
+  });
+
+  // Listen for category set updates
+  browser.runtime.onMessage.addListener((message) => {
+    if (message.type === 'categorySetUpdate') {
+      categorySets = message.categorySets;
+      updateCategorySetSelect();
+    }
+  });
+
   // Function to send response back
   async function respond(success, topicName = '', categorySet = null) {
     try {
-      if (!success && !topicName) {
-        // Just close the modal for cancel
+      if (!success) {
         window.close();
         return;
       }
 
-      // Disable save button to prevent double-clicks
-      if (saveBtn) {
-        saveBtn.disabled = true;
+      // Get selected category set if checkbox is checked
+      if (addStandardCategoriesCheckbox.checked) {
+        const selectedSetId = categorySetSelect.value;
+        if (selectedSetId && categorySets[selectedSetId]) {
+          categorySet = {
+            list_of_categories: [...categorySets[selectedSetId].categories]
+          };
+        }
       }
 
       await browser.runtime.sendMessage({
-        type: 'addTopicResponse',
-        success,
+        type: 'modalResponse',
+        success: true,
         topicName,
         categorySet
       });
-
-      // Close only after successful send
       window.close();
     } catch (err) {
       console.error('Error sending response:', err);
       alert('Failed to create topic. Please try again.');
-      // Re-enable save button on error
-      if (saveBtn) {
-        saveBtn.disabled = false;
-      }
     }
   }
 
   // Save button handler
   saveBtn.addEventListener('click', () => {
     const name = input.value.trim();
-    if (!name) {
-      alert('Please enter a topic name');
-      return;
+    if (name) {
+      respond(true, name);
     }
-    const selectedCategorySet = addStandardCategoriesCheckbox.checked ? 
-      categorySets[categorySetSelect.value] : null;
-    respond(true, name, selectedCategorySet);
   });
 
   // Cancel button handler
@@ -80,13 +106,9 @@ document.addEventListener('DOMContentLoaded', () => {
   input.addEventListener('keyup', (e) => {
     if (e.key === 'Enter') {
       const name = input.value.trim();
-      if (!name) {
-        alert('Please enter a topic name');
-        return;
+      if (name) {
+        respond(true, name);
       }
-      const selectedCategorySet = addStandardCategoriesCheckbox.checked ? 
-        categorySets[categorySetSelect.value] : null;
-      respond(true, name, selectedCategorySet);
     } else if (e.key === 'Escape') {
       respond(false);
     }
@@ -94,4 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Focus input on load
   input.focus();
+  
+  // Load category sets on startup
+  await loadCategorySets();
 });

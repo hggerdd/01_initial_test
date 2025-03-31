@@ -34,6 +34,8 @@
       "scripts": ["background.js"]
     },
     "web_accessible_resources": [
-      "modals/*"
+      "modals/add-topic.html",
+      "modals/category-sets-modal.html",
+      "modals/category-sets-modal.js"
     ]
 }
