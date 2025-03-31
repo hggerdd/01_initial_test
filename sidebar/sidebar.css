@@ -123,13 +123,15 @@ input[type="text"] {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;  /* Increase padding for better readability */
-  margin: 2px;
+  padding: 8px 12px;
+  margin: 4px;  /* Increased from 2px to create more space between items */
   background-color: #222;
   border-radius: 3px;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, transform 0.15s;
   font-size: 13px;
   cursor: pointer;
+  user-select: none;  /* Prevent text selection during drag */
+  position: relative;  /* Added for drop zone positioning */
 }
 
 .topic-item.selected {
@@ -318,4 +320,43 @@ input[type="text"] {
 
 .icon-btn i {
   font-size: 14px;
+}
+
+/* Enhanced drag and drop styles */
+.topic-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+  background-color: #333;
+  z-index: 1000;  /* Ensure dragged item stays on top */
+}
+
+.topic-item.drag-over::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;  /* Position at the top edge of the margin */
+  height: 8px;  /* Increased height of drop zone */
+  background: linear-gradient(transparent 0%, #4CAF50 50%, transparent 100%);
+  pointer-events: none;  /* Allow events to pass through */
+  opacity: 0.5;
+}
+
+/* Show drop indicator at bottom when it's the last item */
+.topic-item.drag-over:last-child::before {
+  top: auto;
+  bottom: -4px;
+}
+
+/* Add hover state for potential drop zones */
+.topic-item:not(.dragging):hover::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -4px;
+  height: 8px;
+  background: linear-gradient(transparent 0%, rgba(76, 175, 80, 0.3) 50%, transparent 100%);
+  pointer-events: none;
+  opacity: 0.3;
 }

@@ -7,7 +7,12 @@ export class TopicManager {
     this.callbacks = {
       onTopicSelect: null,
       onTopicEdit: null,
-      onTopicDelete: null
+      onTopicDelete: null,
+      onTopicReorder: null
+    };
+    this.dragState = {
+      draggedIndex: -1,
+      dropTarget: null
     };
   }
 
@@ -44,7 +49,9 @@ export class TopicManager {
       const isSelected = index === currentTopicIndex;
       
       return `
-        <li class="topic-item ${isSelected ? 'selected' : ''}" data-id="${index}">
+        <li class="topic-item ${isSelected ? 'selected' : ''}" 
+            data-id="${index}" 
+            draggable="true">
           <span class="topic-text">
             ${escapeHTML(topicData.name)} 
             <span class="tab-count-badge">(${tabCount})</span>
@@ -79,7 +86,7 @@ export class TopicManager {
 
   attachEventListeners(topicsData) {
     if (!this.elements.topicsList) return;
-    if (!this.callbacks.onTopicSelect) return;  // Guard against missing callbacks
+    if (!this.callbacks.onTopicSelect) return;
 
     const topicItems = this.elements.topicsList.querySelectorAll('.topic-item');
     
@@ -91,7 +98,15 @@ export class TopicManager {
         }
       });
 
-      // Edit button - Fixed event handling
+      // Drag and drop events
+      item.addEventListener('dragstart', (e) => this.handleDragStart(e, index));
+      item.addEventListener('dragover', (e) => this.handleDragOver(e));
+      item.addEventListener('dragenter', (e) => this.handleDragEnter(e));
+      item.addEventListener('dragleave', (e) => this.handleDragLeave(e));
+      item.addEventListener('drop', (e) => this.handleDrop(e, index, topicsData));
+      item.addEventListener('dragend', () => this.handleDragEnd());
+
+      // Edit button
       const editBtn = item.querySelector('.edit-btn');
       if (editBtn) {
         editBtn.addEventListener('click', (e) => {
@@ -117,6 +132,74 @@ export class TopicManager {
           this.callbacks.onTopicDelete(index);
         });
       }
+    });
+  }
+
+  handleDragStart(e, index) {
+    this.dragState.draggedIndex = index;
+    e.currentTarget.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  }
+
+  handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  handleDragEnter(e) {
+    e.preventDefault();
+    const item = e.currentTarget;
+    if (!item.classList.contains('drag-over')) {
+      item.classList.add('drag-over');
+    }
+  }
+
+  handleDragLeave(e) {
+    e.currentTarget.classList.remove('drag-over');
+  }
+
+  async handleDrop(e, dropIndex, topicsData) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    
+    const draggedIndex = this.dragState.draggedIndex;
+    if (draggedIndex === -1 || draggedIndex === dropIndex) return;
+
+    // Reorder the topics array
+    const [draggedTopic] = topicsData.splice(draggedIndex, 1);
+    topicsData.splice(dropIndex, 0, draggedTopic);
+
+    // Update indices in the tab manager
+    if (this.callbacks.onTopicReorder) {
+      await this.callbacks.onTopicReorder(draggedIndex, dropIndex);
+    }
+
+    // Adjust currentTopicIndex if needed
+    if (this.currentTopicIndex === draggedIndex) {
+      this.currentTopicIndex = dropIndex;
+    } else if (
+      this.currentTopicIndex > draggedIndex && 
+      this.currentTopicIndex <= dropIndex
+    ) {
+      this.currentTopicIndex--;
+    } else if (
+      this.currentTopicIndex < draggedIndex && 
+      this.currentTopicIndex >= dropIndex
+    ) {
+      this.currentTopicIndex++;
+    }
+
+    // Save and re-render
+    await this.saveTopicsData(topicsData, this.currentTopicIndex);
+    this.renderTopics(topicsData, this.currentTopicIndex);
+  }
+
+  handleDragEnd() {
+    this.dragState.draggedIndex = -1;
+    const items = this.elements.topicsList.querySelectorAll('.topic-item');
+    items.forEach(item => {
+      item.classList.remove('dragging', 'drag-over');
     });
   }
 

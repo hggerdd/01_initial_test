@@ -28,6 +28,39 @@ document.addEventListener("DOMContentLoaded", async function() {
       }
     };
 
+    // Add the reorder handler at the same level as other handlers
+    async function handleTopicReorder(fromIndex, toIndex) {
+      try {
+        // Update TabManager's mapping
+        for (const [tabId, topicIndex] of tabManager.tabToTopicMap.entries()) {
+          if (topicIndex === fromIndex) {
+            tabManager.tabToTopicMap.set(tabId, toIndex);
+          } else if (
+            topicIndex > fromIndex && 
+            topicIndex <= toIndex
+          ) {
+            tabManager.tabToTopicMap.set(tabId, topicIndex - 1);
+          } else if (
+            topicIndex < fromIndex && 
+            topicIndex >= toIndex
+          ) {
+            tabManager.tabToTopicMap.set(tabId, topicIndex + 1);
+          }
+        }
+
+        // Re-validate tab assignments
+        await tabManager.validateTabAssignments();
+        
+        // Re-verify tab visibility
+        await tabManager.verifyTabVisibility();
+
+        return true;
+      } catch (error) {
+        console.error('[Sidebar] Error in handleTopicReorder:', error);
+        return false;
+      }
+    }
+
     // Initialize managers with topics list element
     const elements = {
       addTopicBtn: document.getElementById("add-topic-btn"),
@@ -54,7 +87,8 @@ document.addEventListener("DOMContentLoaded", async function() {
     topicManager.setCallbacks({
       onTopicSelect: selectTopic,
       onTopicEdit: (index, newName) => saveEditedTopic(index, newName),
-      onTopicDelete: deleteTopic
+      onTopicDelete: deleteTopic,
+      onTopicReorder: handleTopicReorder
     });
 
     categoryManager.setCallbacks({
